@@ -6,7 +6,7 @@ def get_db():
         dbname="iot_db",
         user="iot",
         password="2003",
-        host="159.223.63.61",
+        host="18.143.176.27",
         port=5432,
         cursor_factory=RealDictCursor  # 👈 CHÍNH LÀ DÒNG NÀY
     )

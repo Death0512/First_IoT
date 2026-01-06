@@ -9,7 +9,7 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 # FastAPI Server URL - có thể config qua environment variable
-FASTAPI_SERVER_URL = "http://159.223.63.61:3000"
+FASTAPI_SERVER_URL = "http://18.143.176.27:3000"
 
 
 def trigger_gateway_sync(user_id: str, timeout: int = 2) -> bool:

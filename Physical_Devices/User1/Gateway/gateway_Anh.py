@@ -25,7 +25,7 @@ CONFIG = {
     'user_id': '00001',
     
     'vps_broker': {
-        'host': '159.223.63.61',
+        'host': '18.143.176.27',
         'port': 8883,
         'use_tls': True,
         'ca_cert': './certs/ca.cert.pem',
@@ -33,10 +33,10 @@ CONFIG = {
         'client_key': './certs/gateway1.key.pem',
     },
     
-    'vps_api_url': 'http://159.223.63.61:3000',
+    'vps_api_url': '18.143.176.27',
     
     'lora_serial': {
-        'port': 'COM7',
+        'port': 'COM6',
         'baudrate': 9600,
     },
     
@@ -50,10 +50,9 @@ CONFIG = {
     
     'db_path': './data',
     'devices_db': 'devices.json',
-    'heartbeat_interval': 30,  # Changed from 60 to 30 seconds
+    'heartbeat_interval': 30,  # heartbeat to server
 }
 
-# ============= CRC32 =============
 def crc32(data: bytes, poly=0x04C11DB7, init=0xFFFFFFFF, xor_out=0xFFFFFFFF) -> int:
     crc = init
     for b in data:
@@ -66,7 +65,6 @@ def crc32(data: bytes, poly=0x04C11DB7, init=0xFFFFFFFF, xor_out=0xFFFFFFFF) -> 
             crc &= 0xFFFFFFFF
     return crc ^ xor_out
 
-# ============= DATABASE MANAGER =============
 class DatabaseManager:
     def __init__(self, db_path, devices_db):
         self.db_path = db_path
@@ -78,7 +76,7 @@ class DatabaseManager:
         if os.path.exists(self.devices_file):
             with open(self.devices_file, 'r') as f:
                 return json.load(f)
-        return {'passwords': {}, 'rfid_cards': {}, 'devices': {}}
+        return {'rfid_cards': {}, 'devices': {}}
     
     def save_devices(self):
         backup_file = f"{self.devices_file}.backup"
@@ -93,7 +91,6 @@ class DatabaseManager:
         rfid_cards = self.devices_data.get('rfid_cards', {})
         uid_lower = uid.lower()
 
-        # Normalize all keys to lowercase for case-insensitive comparison
         rfid_cards_normalized = {k.lower(): v for k, v in rfid_cards.items()}
 
         if uid_lower not in rfid_cards_normalized:
@@ -115,7 +112,6 @@ class DatabaseManager:
 
         return True, None
 
-# ============= VPS MQTT MANAGER =============
 class VPSMQTTManager:
     def __init__(self, config, sync_manager=None):
         self.config = config
@@ -174,7 +170,6 @@ class VPSMQTTManager:
             client.subscribe(command_topic)
             logger.info(f" Subscribed to command topic: {command_topic}")
             
-            # Send immediate online status upon connection
             self.publish_gateway_status('online')
             
         else:
@@ -195,7 +190,7 @@ class VPSMQTTManager:
     def attempt_reconnect(self):
         if self.reconnect_attempts < self.max_reconnect_attempts:
             self.reconnect_attempts += 1
-            backoff_time = min(2 ** self.reconnect_attempts, 60)
+            backoff_time = min(2 ** self.reconnect_attempts, 120)
             
             logger.info(f" Reconnect attempt {self.reconnect_attempts}/{self.max_reconnect_attempts} "
                        f"in {backoff_time}s")
@@ -263,7 +258,7 @@ class VPSMQTTManager:
     def handle_command(self, topic, data):
         """Handle incoming command from VPS"""
         try:
-            # Parse topic: gateway/Gateway1/command/rfid_gate_01
+            # topic: gateway/Gateway1/command/rfid_gate_01
             parts = topic.split('/')
             if len(parts) < 4:
                 logger.warning(f" Invalid command topic: {topic}")
@@ -280,7 +275,6 @@ class VPSMQTTManager:
                 logger.error(" LoRa handler not available")
                 return
 
-            # Send command via LoRa
             if device_id == 'rfid_gate_01':
                 if command == 'unlock':
                     duration = params.get('duration', 5)
@@ -295,7 +289,6 @@ class VPSMQTTManager:
         except Exception as e:
             logger.error(f"Error handling command: {e}")
 
-# ============= LORA HANDLER =============
 class LoRaHandler:
     def __init__(self, config, db_manager, mqtt_manager):
         self.config = config
@@ -381,9 +374,7 @@ class LoRaHandler:
                 
                 granted, deny_reason = self.db_manager.verify_rfid(uid)
 
-                # CRITICAL: Delay to allow RFID device LoRa module to switch from TX to RX mode
-                # Without this delay, device cannot receive our response
-                time.sleep(0.15)  # 150ms delay
+                time.sleep(0.15)
 
                 status = "GRANT" if granted else "DENY5"
                 self.send_access_response(status)
@@ -423,12 +414,11 @@ class LoRaHandler:
             packet = bytearray([0xC0, 0x00, 0x00, 0x00, 0x00, 0x17, len(response_bytes)])
             packet.extend(response_bytes)
 
-            # Debug: Print packet before sending
             logger.info(f"[LoRa] Sending response: {status} ({len(packet)} bytes)")
             logger.info(f"[LoRa] Packet: {' '.join([f'{b:02X}' for b in packet])}")
 
             bytes_written = self.serial_port.write(packet)
-            self.serial_port.flush()  # Ensure data is sent immediately
+            self.serial_port.flush()  
 
             logger.info(f"[LoRa] Response sent: {status} ({bytes_written} bytes written)")
         except Exception as e:
@@ -449,14 +439,12 @@ class LoRaHandler:
     def send_remote_unlock(self, command_id, user_id, duration):
         """Send remote unlock command via LoRa"""
         try:
-            # Convert duration from seconds to milliseconds
             duration_ms = duration * 1000
 
-            # Format: REMOTE_UNLOCK:{command_id}:{user}:{duration_ms}
+            # REMOTE_UNLOCK:{command_id}:{user}:{duration_ms}
             command = f"REMOTE_UNLOCK:{command_id}:{user_id}:{duration_ms}"
             command_bytes = command.encode('utf-8')
 
-            # Build LoRa packet
             packet = bytearray([0xC0, 0x00, 0x00, 0x00, 0x00, 0x17, len(command_bytes)])
             packet.extend(command_bytes)
 
@@ -469,11 +457,10 @@ class LoRaHandler:
     def send_remote_lock(self, command_id, user_id):
         """Send remote lock command via LoRa"""
         try:
-            # Format: REMOTE_LOCK:{command_id}:{user}
+            # REMOTE_LOCK:{command_id}:{user}
             command = f"REMOTE_LOCK:{command_id}:{user_id}"
             command_bytes = command.encode('utf-8')
 
-            # Build LoRa packet
             packet = bytearray([0xC0, 0x00, 0x00, 0x00, 0x00, 0x17, len(command_bytes)])
             packet.extend(command_bytes)
 
@@ -489,7 +476,6 @@ class LoRaHandler:
             self.serial_port.close()
             logger.info(" LoRa Serial Closed")
 
-# ============= ENHANCED HEARTBEAT =============
 class HeartbeatManager:
     def __init__(self, mqtt_manager, sync_manager, interval, stop_event):
         self.mqtt_manager = mqtt_manager
@@ -537,7 +523,6 @@ class HeartbeatManager:
         
         logger.info(" Heartbeat Manager stopped")
 
-# ============= MAIN =============
 start_time = time.time()
 stop_event = Event()
 
@@ -568,7 +553,6 @@ def main():
 
     if lora_handler.connect():
         lora_handler.start()
-        # Set LoRa handler reference in MQTT manager for command handling
         mqtt_manager.set_lora_handler(lora_handler)
     else:
         logger.error("Failed to start LoRa handler. Exiting.")

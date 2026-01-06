@@ -4,7 +4,6 @@
 #include <MFRC522.h>
 #include <Servo.h>
 
-// ============= CONFIGURATION =============
 #define DEVICE_ID "rfid_gate_01"
 #define LORA_RX D2
 #define LORA_TX D1
@@ -13,26 +12,21 @@
 #define SERVO_PIN D0
 #define RESPONSE_TIMEOUT_MS 12000
 
-// Device type cho RFID Gate
 #define DEVICE_TYPE_RFID_GATE 0x01
-
-// Message types
 #define MSG_TYPE_RFID_SCAN 0x01
 #define MSG_TYPE_GATE_STATUS 0x06
 
-// ============= HARDWARE =============
 SoftwareSerial loraSerial(LORA_RX, LORA_TX);
 LoRa_E32 lora(&loraSerial);
 MFRC522 rfid(SS_PIN, RST_PIN);
 Servo gate;
 
-// ============= STATE =============
 uint16_t seq = 0;
 unsigned long lastHeartbeat = 0;
-const unsigned long HEARTBEAT_INTERVAL = 60000; // 60 seconds
+const unsigned long HEARTBEAT_INTERVAL = 60000; // 60s
 
-// ============= CRC32 (giống Gateway Python) =============
-uint32_t crc32(const uint8_t* data, size_t len) {
+//kiem tra tinh toan ven
+uint32_t crc32(const uint8_t* data, size_t len) { 
   uint32_t crc = 0xFFFFFFFF;
   const uint32_t poly = 0x04C11DB7;
   
@@ -52,27 +46,26 @@ uint32_t crc32(const uint8_t* data, size_t len) {
 struct RemoteControlState {
     bool listening_for_command = false;
     unsigned long listen_start = 0;
-    const unsigned long listen_timeout = 30000;  // 30 seconds
+    const unsigned long listen_timeout = 30000;  // 30s
     String current_command_id = "";
     String initiated_by = "";
 };
 
 RemoteControlState remoteCtrl;
 
-// ============= FORWARD DECLARATIONS =============
 void handleRemoteUnlockCommand(String command);
 void handleRemoteLockCommand(String command);
 void executeRemoteUnlock(unsigned long duration_ms);
 void sendRemoteResponse(String command_id, bool success, const char* status);
 
-// ============= MESSAGE BUILDING =============
 bool sendRFIDScan(const byte* uid, byte uidLen) {
+  // Header(0x00 0x02 0x17) + msg_typ + device_type + seq + timestamp + uid + crc32
   if (uidLen > 10) return false;
   
   uint8_t buffer[64];
   int idx = 0;
   
-  // Prefix (3 bytes): 0x00 0x02 0x17
+  // Header (3 bytes): 0x00 0x02 0x17
   buffer[idx++] = 0x00;
   buffer[idx++] = 0x02;
   buffer[idx++] = 0x17;
@@ -83,7 +76,7 @@ bool sendRFIDScan(const byte* uid, byte uidLen) {
   buffer[idx++] = header0;
   
   // Header byte 1: [flags(4 bits)][device_type(4 bits)]
-  // flags = 0x00, device_type = 0x01 (RFID gate)
+  // flags = 0x00, device_type = 0x01
   uint8_t header1 = (0x00 << 4) | DEVICE_TYPE_RFID_GATE;
   buffer[idx++] = header1;
   
@@ -115,11 +108,10 @@ bool sendRFIDScan(const byte* uid, byte uidLen) {
   buffer[idx++] = (crc >> 8) & 0xFF;
   buffer[idx++] = (crc >> 16) & 0xFF;
   buffer[idx++] = (crc >> 24) & 0xFF;
-  
-  // Send via LoRa
+
   lora.sendMessage(buffer, idx);
   
-  Serial.print(F("RFID TX: "));
+  Serial.print(F("RFID: "));
   for (byte i = 0; i < uidLen; i++) {
     if (uid[i] < 0x10) Serial.print("0");
     Serial.print(uid[i], HEX);
@@ -138,7 +130,7 @@ bool sendStatusMessage(const char* status) {
   uint8_t buffer[64];
   int idx = 0;
   
-  // Prefix
+  // Header
   buffer[idx++] = 0x00;
   buffer[idx++] = 0x02;
   buffer[idx++] = 0x17;
@@ -189,7 +181,7 @@ bool sendStatusMessage(const char* status) {
   return true;
 }
 
-// ============= RECEIVE ACK FROM GATEWAY =============
+//nhan phan hoi tu gateway, luon check header
 bool receiveAckMessage(bool* accessGranted, unsigned long timeoutMs) {
   unsigned long startTime = millis();
 
@@ -273,6 +265,7 @@ bool receiveAckMessage(bool* accessGranted, unsigned long timeoutMs) {
   return false;
 }
 
+// nhan remote command tu client
 bool checkForRemoteCommand() {
     if (!lora.available()) {
         return false;
@@ -349,7 +342,6 @@ bool checkForRemoteCommand() {
     return false;
 }
 
-// ============= HARDWARE CONTROL =============
 void openGate() {
   Serial.println(F("=== ACCESS GRANTED ==="));
   
@@ -364,6 +356,7 @@ void openGate() {
   Serial.println(F("Gate closed"));
 }
 
+//xu li command dong cong
 void handleRemoteUnlockCommand(String command) {
     Serial.println(F("\n[REMOTE] Processing remote unlock command"));
     
@@ -382,7 +375,6 @@ void handleRemoteUnlockCommand(String command) {
     String user = command.substring(idx2 + 1, idx3);
     unsigned long duration_ms = command.substring(idx3 + 1).toInt();
     
-    // Validate duration (1-30 seconds)
     if (duration_ms < 1000 || duration_ms > 30000) {
         duration_ms = 5000;  // Default 5 seconds
     }
@@ -395,17 +387,14 @@ void handleRemoteUnlockCommand(String command) {
     remoteCtrl.current_command_id = command_id;
     remoteCtrl.initiated_by = user;
     
-    // Execute unlock
     executeRemoteUnlock(duration_ms);
     
-    // Send acknowledgment
     sendRemoteResponse(command_id, true, "unlocked");
     
-    // Send status message via LoRa
     sendStatusMessage("REMOTE_OPEN");
 }
 
-// ============= HANDLE REMOTE LOCK COMMAND =============
+//xu li command dong cong
 void handleRemoteLockCommand(String command) {
     Serial.println(F("\n[REMOTE] Processing remote lock command"));
     
@@ -423,19 +412,15 @@ void handleRemoteLockCommand(String command) {
     
     Serial.printf("[REMOTE] Lock by: %s\n", user.c_str());
     
-    // Execute lock immediately
     gate.write(0);
     
-    // Send acknowledgment
     sendRemoteResponse(command_id, true, "locked");
     
-    // Send status
     sendStatusMessage("REMOTE_CLOS");
     
     Serial.println(F("[REMOTE] Gate locked"));
 }
 
-// ============= EXECUTE REMOTE UNLOCK =============
 void executeRemoteUnlock(unsigned long duration_ms) {
     Serial.println(F("\n=== REMOTE ACCESS GRANTED ==="));
     
@@ -458,9 +443,7 @@ void executeRemoteUnlock(unsigned long duration_ms) {
     Serial.println(F("=== REMOTE UNLOCK COMPLETE ===\n"));
 }
 
-// ============= SEND REMOTE RESPONSE VIA LORA =============
 void sendRemoteResponse(String command_id, bool success, const char* status) {
-    // Create response message
     // Format: "ACK:{command_id}:{success}:{status}"
     String response = "ACK:" + command_id + ":" + 
                      String(success ? "1" : "0") + ":" + 
@@ -489,20 +472,17 @@ void sendRemoteResponse(String command_id, bool success, const char* status) {
         buffer[idx++] = response[i];
     }
     
-    // Send via LoRa
     lora.sendMessage(buffer, idx);
     
     Serial.print(F("[RESPONSE] Sent: "));
     Serial.println(response);
 }
 
-// ============= HEARTBEAT =============
 void sendHeartbeat() {
   sendStatusMessage("ALIVE");
   Serial.println(F("[HEARTBEAT] Sent to Gateway"));
 }
 
-// ============= SETUP =============
 void setup() {
   Serial.begin(9600);
   delay(100);
@@ -512,30 +492,24 @@ void setup() {
   Serial.println(F("Device: " DEVICE_ID));
   Serial.println(F("Protocol: Gateway Compatible"));
   Serial.println(F("================================\n"));
-  
-  
-  // Setup LoRa
+
   loraSerial.begin(9600);
   lora.begin();
   Serial.println(F("[OK] LoRa initialized"));
-  
-  // Setup RFID
+
   SPI.begin();
   rfid.PCD_Init();
   Serial.println(F("[OK] RFID initialized"));
-  
-  // Setup Servo
+
   gate.attach(SERVO_PIN);
   gate.write(0);
   Serial.println(F("[OK] Servo initialized"));
   
-  // Initialize random seed
   randomSeed(analogRead(A0));
 
   remoteCtrl.listening_for_command = false;
   remoteCtrl.listen_start = 0;
 
-  // Send online status
   sendStatusMessage("ONLINE");
   lastHeartbeat = millis();
 
@@ -543,9 +517,7 @@ void setup() {
   
 }
 
-// ============= MAIN LOOP =============
 void loop() {
-  // Send periodic heartbeat
   unsigned long currentMillis = millis();
   if (currentMillis - lastHeartbeat >= HEARTBEAT_INTERVAL) {
     sendHeartbeat();
@@ -556,15 +528,14 @@ void loop() {
     delay(100);
   }
 
-  // Check for RFID card
+  // Check xem co RFID can quet hay khong
   if (!rfid.PICC_IsNewCardPresent() || !rfid.PICC_ReadCardSerial()) {
     delay(50);
     return;
   }
   
   Serial.println(F("\n--- RFID Card Detected ---"));
-  
-  // Validate UID
+
   if (rfid.uid.size == 0 || rfid.uid.size > 10) {
     Serial.println(F("[ERROR] Invalid UID size"));
     rfid.PICC_HaltA();
@@ -572,13 +543,11 @@ void loop() {
     delay(2000);
     return;
   }
-  
-  // Copy UID
+
   byte uid[10];
   byte uidLen = rfid.uid.size;
   memcpy(uid, rfid.uid.uidByte, uidLen);
-  
-  // Send RFID scan message
+
   if (!sendRFIDScan(uid, uidLen)) {
     Serial.println(F("[ERROR] Failed to send message"));
     rfid.PICC_HaltA();
@@ -587,12 +556,10 @@ void loop() {
     return;
   }
 
-  // CRITICAL: Delay to allow LoRa module to switch from TX to RX mode
-  // Without this delay, the module is still in TX mode and cannot receive Gateway response
   Serial.println(F("[WAIT] Switching LoRa to RX mode..."));
-  delay(100);  // 100ms delay for TX->RX transition
+  delay(100);  
 
-  // Wait for ACK from Gateway
+  // doi ACK tu gateway
   bool accessGranted = false;
   if (receiveAckMessage(&accessGranted, RESPONSE_TIMEOUT_MS)) {
     if (accessGranted) {
@@ -602,8 +569,7 @@ void loop() {
   else {
     Serial.println(F("[ERROR] No response from Gateway"));
   }
-  
-  // Cleanup
+
   rfid.PICC_HaltA();
   rfid.PCD_StopCrypto1();
   

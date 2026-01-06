@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Door Access Control Flow</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a1a;
+            color: #fff;
+            overflow-x: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #ff6b6b 0%, #4ecdc4 100%);
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 5px;
+        }
+
+        .header p {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .canvas-container {
+            position: relative;
+            width: 100%;
+            height: calc(100vh - 80px);
+            overflow: auto;
+            background: #2a2a2a;
+        }
+
+        .flow-canvas {
+            position: relative;
+            width: 2400px;
+            height: 1600px;
+            padding: 40px;
+        }
+
+        .zone-label {
+            position: absolute;
+            font-size: 16px;
+            font-weight: bold;
+            color: #ff6b6b;
+            padding: 8px 15px;
+            background: rgba(255, 107, 107, 0.1);
+            border: 2px solid #ff6b6b;
+            border-radius: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .node {
+            position: absolute;
+            border-radius: 5px;
+            padding: 10px 15px;
+            min-width: 160px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 13px;
+            border: 2px solid transparent;
+            z-index: 10;
+        }
+
+        .node:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+            border-color: #fff;
+        }
+
+        .node-header {
+            font-weight: bold;
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .node-icon {
+            font-size: 16px;
+        }
+
+        .node-content {
+            font-size: 11px;
+            opacity: 0.9;
+            line-height: 1.4;
+        }
+
+        .node-device {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+
+        .node-input {
+            background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+            color: #333;
+        }
+
+        .node-security {
+            background: linear-gradient(135deg, #ff6b6b 0%, #c92a2a 100%);
+        }
+
+        .node-mqtt {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        }
+
+        .node-function {
+            background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+        }
+
+        .node-control {
+            background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+            color: #333;
+        }
+
+        .node-broker {
+            background: linear-gradient(135deg, #ff9a56 0%, #ff6a88 100%);
+        }
+
+        .node-gateway {
+            background: linear-gradient(135deg, #ffd89b 0%, #19547b 100%);
+            min-width: 180px;
+        }
+
+        .node-vps {
+            background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%);
+            color: #333;
+        }
+
+        svg.connections {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .connection-line {
+            stroke: #888;
+            stroke-width: 2;
+            fill: none;
+            stroke-dasharray: 5, 5;
+        }
+
+        .connection-auth {
+            stroke: #ff6b6b;
+            stroke-width: 2.5;
+            fill: none;
+        }
+
+        .connection-control {
+            stroke: #4ecdc4;
+            stroke-width: 2.5;
+            fill: none;
+        }
+
+        .connection-vps {
+            stroke: #4facfe;
+            stroke-width: 2.5;
+            fill: none;
+            stroke-dasharray: 8, 4;
+        }
+
+        .info-panel {
+            position: fixed;
+            right: -420px;
+            top: 80px;
+            width: 400px;
+            height: calc(100vh - 80px);
+            background: #1e1e1e;
+            box-shadow: -2px 0 10px rgba(0,0,0,0.5);
+            transition: right 0.3s ease;
+            overflow-y: auto;
+            z-index: 100;
+            padding: 20px;
+        }
+
+        .info-panel.active {
+            right: 0;
+        }
+
+        .info-panel h3 {
+            color: #ff6b6b;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #ff6b6b;
+        }
+
+        .info-section {
+            margin-bottom: 20px;
+        }
+
+        .info-section h4 {
+            color: #4ecdc4;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+
+        .info-section p, .info-section ul {
+            font-size: 13px;
+            line-height: 1.6;
+            color: #ccc;
+        }
+
+        .info-section ul {
+            padding-left: 20px;
+        }
+
+        .info-section li {
+            margin-bottom: 5px;
+        }
+
+        .close-info {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #ff6b6b;
+            border: none;
+            color: #fff;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 18px;
+        }
+
+        .legend {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(30, 30, 30, 0.95);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+            z-index: 50;
+        }
+
+        .legend h4 {
+            margin-bottom: 10px;
+            color: #ff6b6b;
+            font-size: 14px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+            font-size: 12px;
+        }
+
+        .legend-line {
+            width: 30px;
+            height: 2px;
+        }
+
+        .code-block {
+            background: #000;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            margin-top: 10px;
+            overflow-x: auto;
+        }
+
+        .highlight {
+            color: #4ecdc4;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🚪 Door Access Control System - Gateway 2</h1>
+        <p>Keypad Password → HMAC Authentication → Servo Lock Control</p>
+    </div>
+
+    <div class="canvas-container">
+        <div class="flow-canvas" id="flowCanvas">
+            <svg class="connections" id="connectionsSvg"></svg>
+            
+            <!-- Zone Labels -->
+            <div class="zone-label" style="left: 80px; top: 20px;">🔐 ESP8266 DEVICE</div>
+            <div class="zone-label" style="left: 1120px; top: 20px;">🛡️ GATEWAY</div>
+            <div class="zone-label" style="left: 1750px; top: 20px;">☁️ VPS CLOUD</div>
+            
+            <!-- ========== ESP8266 DEVICE ZONE ========== -->
+            
+            <!-- Main Device -->
+            <div class="node node-device" style="left: 50px; top: 100px;" data-info="passkey-device">
+                <div class="node-header">
+                    <span class="node-icon">🔐</span>
+                    <span>ESP8266 (passkey_01)</span>
+                </div>
+                <div class="node-content">Keypad 4x3<br>Servo Motor<br>LED Status</div>
+            </div>
+
+            <!-- Keypad Input -->
+            <div class="node node-input" style="left: 300px; top: 100px;" data-info="keypad">
+                <div class="node-header">
+                    <span class="node-icon">⌨️</span>
+                    <span>Keypad Input</span>
+                </div>
+                <div class="node-content">4x3 Matrix<br>6-digit password<br>10s timeout</div>
+            </div>
+
+            <!-- Password Buffer -->
+            <!-- <div class="node node-function" style="left: 550px; top: 100px;" data-info="pw-buffer">
+                <div class="node-header">
+                    <span class="node-icon">📝</span>
+                    <span>Password Buffer</span>
+                </div>
+                <div class="node-content">Collect 6 digits<br>10s timeout</div>
+            </div> -->
+
+            <!-- SHA256 Hash -->
+            <div class="node node-security" style="left: 800px; top: 100px;" data-info="sha256">
+                <div class="node-header">
+                    <span class="node-icon">🔒</span>
+                    <span>SHA256 Hash</span>
+                </div>
+                <div class="node-content">Salt + Password<br>64-char hex</div>
+            </div>
+
+            <!-- Build Request -->
+            <div class="node node-function" style="left: 550px; top: 250px;" data-info="build-req">
+                <div class="node-header">
+                    <span class="node-icon">📦</span>
+                    <span>Build Request</span>
+                </div>
+                <div class="node-content">JSON body<br>Timestamp + Nonce</div>
+            </div>
+
+            <!-- HMAC Sign -->
+            <div class="node node-security" style="left: 800px; top: 250px;" data-info="hmac">
+                <div class="node-header">
+                    <span class="node-icon">✍️</span>
+                    <span>HMAC-SHA256</span>
+                </div>
+                <div class="node-content">Sign request<br>Verify integrity</div>
+            </div>
+
+            <!-- MQTT Publish Request -->
+            <div class="node node-mqtt" style="left: 800px; top: 400px;" data-info="mqtt-pub-req">
+                <div class="node-header">
+                    <span class="node-icon">📤</span>
+                    <span>Publish Request</span>
+                </div>
+                <div class="node-content">Topic: request<br>QoS: 0</div>
+            </div>
+
+            <!-- Wait for Response -->
+            <!-- <div class="node node-function" style="left: 550px; top: 530px;" data-info="wait-resp">
+                <div class="node-header">
+                    <span class="node-icon">⏳</span>
+                    <span>Wait Response</span>
+                </div>
+                <div class="node-content">15s timeout<br>Block input</div>
+            </div> -->
+
+            <!-- MQTT Subscribe Response -->
+            <div class="node node-mqtt" style="left: 800px; top: 600px;" data-info="mqtt-sub-resp">
+                <div class="node-header">
+                    <span class="node-icon">📥</span>
+                    <span>Subscribe Command</span>
+                </div>
+                <div class="node-content">Topic: command<br>QoS: 1</div>
+            </div>
+
+            <!-- Process Response -->
+            <div class="node node-function" style="left: 300px; top: 600px;" data-info="process-resp">
+                <div class="node-header">
+                    <span class="node-icon">🔍</span>
+                    <span>Process Response</span>
+                </div>
+                <div class="node-content">OPEN or LOCK<br>Parse reason</div>
+            </div>
+
+            <!-- Access Granted -->
+            <div class="node node-control" style="left: 50px; top: 800px;" data-info="granted">
+                <div class="node-header">
+                    <span class="node-icon">✅</span>
+                    <span>Access Granted</span>
+                </div>
+                <div class="node-content">Open door<br>Green LED</div>
+            </div>
+
+            <!-- Access Denied -->
+            <div class="node node-control" style="left: 300px; top: 800px;" data-info="denied">
+                <div class="node-header">
+                    <span class="node-icon">❌</span>
+                    <span>Access Denied</span>
+                </div>
+                <div class="node-content">Keep locked<br>Red LED</div>
+            </div>
+
+            <!-- Servo Control -->
+            <div class="node node-control" style="left: 50px; top: 950px;" data-info="servo">
+                <div class="node-header">
+                    <span class="node-icon">🔓</span>
+                    <span>Servo Control</span>
+                </div>
+                <div class="node-content">180° = OPEN<br>0° = LOCK</div>
+            </div>
+
+            <!-- Remote Unlock Handler -->
+            <!-- <div class="node node-control" style="left: 550px; top: 800px;" data-info="remote-unlock">
+                <div class="node-header">
+                    <span class="node-icon">📱</span>
+                    <span>Remote Unlock</span>
+                </div>
+                <div class="node-content">From VPS<br>Duration config</div>
+            </div> -->
+
+            <!-- ========== LOCAL MQTT BROKER ========== -->
+            
+            <div class="node node-broker" style="left: 1150px; top: 350px;" data-info="mqtt-broker">
+                <div class="node-header">
+                    <span class="node-icon">🔄</span>
+                    <span>Local MQTT Broker</span>
+                </div>
+                <div class="node-content">192.168.1.205:1884<br>TLS Secured</div>
+            </div>
+
+            <!-- ========== GATEWAY ZONE ========== -->
+            
+            <!-- Gateway Subscribe -->
+            <div class="node node-gateway" style="left: 1450px; top: 200px;" data-info="gw-sub">
+                <div class="node-header">
+                    <span class="node-icon">📡</span>
+                    <span>Gateway Subscribe</span>
+                </div>
+                <div class="node-content">Listen: request<br>Listen: status</div>
+            </div>
+
+            <!-- HMAC Verify -->
+            <div class="node node-security" style="left: 1450px; top: 330px;" data-info="gw-hmac">
+                <div class="node-header">
+                    <span class="node-icon">🔐</span>
+                    <span>Verify HMAC</span>
+                </div>
+                <div class="node-content">Check signature<br>Prevent tampering</div>
+            </div>
+
+            <!-- Database Lookup -->
+            <div class="node node-gateway" style="left: 1450px; top: 460px;" data-info="db-lookup">
+                <div class="node-header">
+                    <span class="node-icon">💾</span>
+                    <span>Database Lookup</span>
+                </div>
+                <div class="node-content">Match password hash<br>Check active/expired</div>
+            </div>
+
+            <!-- Gateway Publish Response -->
+            <div class="node node-gateway" style="left: 1450px; top: 590px;" data-info="gw-pub">
+                <div class="node-header">
+                    <span class="node-icon">📤</span>
+                    <span>Send Response</span>
+                </div>
+                <div class="node-content">OPEN or LOCK<br>Deny reason</div>
+            </div>
+
+            <!-- Log Access -->
+            <div class="node node-gateway" style="left: 1450px; top: 720px;" data-info="log-access">
+                <div class="node-header">
+                    <span class="node-icon">📝</span>
+                    <span>Log Access Event</span>
+                </div>
+                <div class="node-content">Granted/Denied<br>User ID + Timestamp</div>
+            </div>
+
+            <!-- Remote Command Handler -->
+            <div class="node node-gateway" style="left: 1450px; top: 850px;" data-info="remote-cmd">
+                <div class="node-header">
+                    <span class="node-icon">🎮</span>
+                    <span>Remote Command</span>
+                </div>
+                <div class="node-content">From VPS<br>Unlock/Lock</div>
+            </div>
+
+            <!-- ========== VPS ZONE ========== -->
+            
+            <!-- VPS MQTT Broker -->
+            <div class="node node-vps" style="left: 1800px; top: 350px;" data-info="vps-broker">
+                <div class="node-header">
+                    <span class="node-icon">☁️</span>
+                    <span>VPS MQTT Broker</span>
+                </div>
+                <div class="node-content">159.223.63.61:8883<br>TLS Secured</div>
+            </div>
+
+            <!-- Access Logs Database -->
+            <div class="node node-vps" style="left: 2050px; top: 250px;" data-info="vps-logs">
+                <div class="node-header">
+                    <span class="node-icon">📊</span>
+                    <span>Access Logs DB</span>
+                </div>
+                <div class="node-content">All access attempts<br>Audit trail</div>
+            </div>
+
+            <!-- User Management -->
+            <div class="node node-vps" style="left: 2050px; top: 400px;" data-info="vps-users">
+                <div class="node-header">
+                    <span class="node-icon">👥</span>
+                    <span>User Management</span>
+                </div>
+                <div class="node-content">Passwords<br>Permissions</div>
+            </div>
+
+            <!-- Remote Access API -->
+            <div class="node node-vps" style="left: 2050px; top: 550px;" data-info="vps-api">
+                <div class="node-header">
+                    <span class="node-icon">🌐</span>
+                    <span>Remote Access API</span>
+                </div>
+                <div class="node-content">Web/Mobile unlock<br>REST + MQTT</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Legend -->
+    <div class="legend">
+        <h4>📌 Chú thích:</h4>
+        <div class="legend-item">
+            <div class="legend-line" style="background: #ff6b6b;"></div>
+            <span>Authentication Flow</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-line" style="background: #4ecdc4;"></div>
+            <span>Control Flow</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-line" style="background: #4facfe; border-top: 2px dashed #4facfe;"></div>
+            <span>VPS Communication</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-line" style="background: #888; border-top: 2px dashed #888;"></div>
+            <span>Status/Monitor</span>
+        </div>
+    </div>
+
+    <!-- Info Panel -->
+    <div class="info-panel" id="infoPanel">
+        <button class="close-info" onclick="closeInfo()">×</button>
+        <div id="infoPanelContent"></div>
+    </div>
+
+    <script>
+        function getNodeSide(node, side) {
+            const rect = node.getBoundingClientRect();
+            const canvasRect = document.getElementById('flowCanvas').getBoundingClientRect();
+            const x = rect.left - canvasRect.left;
+            const y = rect.top - canvasRect.top;
+
+            switch (side) {
+                case 'left': return { x: x, y: y + rect.height / 2 };
+                case 'right': return { x: x + rect.width, y: y + rect.height / 2 };
+                case 'top': return { x: x + rect.width / 2, y: y };
+                case 'bottom': return { x: x + rect.width / 2, y: y + rect.height };
+                default: return { x: x + rect.width / 2, y: y + rect.height / 2 }; // center
+            }
+        }
+
+        function drawConnections() {
+            const svg = document.getElementById('connectionsSvg');
+            svg.innerHTML = '';
+            
+            const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+            
+            const markers = [
+                {id: 'arrowAuth', color: '#ff6b6b'},
+                {id: 'arrowControl', color: '#4ecdc4'},
+                {id: 'arrowVPS', color: '#4facfe'},
+                {id: 'arrowStatus', color: '#888'}
+            ];
+            
+            markers.forEach(m => {
+                const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+                marker.setAttribute('id', m.id);
+                marker.setAttribute('markerWidth', '12');
+                marker.setAttribute('markerHeight', '12');
+                marker.setAttribute('refX', '10');
+                marker.setAttribute('refY', '4');
+                marker.setAttribute('orient', 'auto');
+                const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                poly.setAttribute('points', '0 0, 12 4, 0 8');
+                poly.setAttribute('fill', m.color);
+                marker.appendChild(poly);
+                defs.appendChild(marker);
+            });
+            
+            svg.appendChild(defs);
+
+            const connections = [
+                // ESP Input flow
+                { from: '[data-info="keypad"]', fromSide: 'right', to: '[data-info="passkey-device"]', toSide: 'left', type: 'auth' },
+                { from: '[data-info="passkey-device"]', fromSide: 'right', to: '[data-info="sha256"]', toSide: 'left', type: 'auth' },
+                // { from: '[data-info="pw-buffer"]', fromSide: 'right', to: '[data-info="sha256"]', toSide: 'left', type: 'auth' },
+                { from: '[data-info="sha256"]', fromSide: 'bottom', to: '[data-info="build-req"]', toSide: 'top', type: 'auth' },
+                { from: '[data-info="build-req"]', fromSide: 'right', to: '[data-info="hmac"]', toSide: 'left', type: 'auth' },
+                { from: '[data-info="hmac"]', fromSide: 'bottom', to: '[data-info="mqtt-pub-req"]', toSide: 'top', type: 'auth' },
+                
+                // To local MQTT
+                { from: '[data-info="mqtt-pub-req"]', fromSide: 'right', to: '[data-info="mqtt-broker"]', toSide: 'left', type: 'auth' },
+                
+                // Gateway processing
+                { from: '[data-info="mqtt-broker"]', fromSide: 'right', to: '[data-info="gw-sub"]', toSide: 'left', type: 'auth' },
+                { from: '[data-info="gw-sub"]', fromSide: 'bottom', to: '[data-info="gw-hmac"]', toSide: 'top', type: 'auth' },
+                { from: '[data-info="gw-hmac"]', fromSide: 'bottom', to: '[data-info="db-lookup"]', toSide: 'top', type: 'auth' },
+                { from: '[data-info="db-lookup"]', fromSide: 'bottom', to: '[data-info="gw-pub"]', toSide: 'top', type: 'auth' },
+
+                // Response back
+                { from: '[data-info="gw-pub"]', fromSide: 'left', to: '[data-info="mqtt-broker"]', toSide: 'right', type: 'control' },
+                { from: '[data-info="mqtt-broker"]', fromSide: 'bottom', to: '[data-info="mqtt-sub-resp"]', toSide: 'right', type: 'control' },
+                { from: '[data-info="mqtt-sub-resp"]', fromSide: 'left', to: '[data-info="process-resp"]', toSide: 'right', type: 'control' },
+                { from: '[data-info="process-resp"]', fromSide: 'left', to: '[data-info="granted"]', toSide: 'top', type: 'control' },
+                { from: '[data-info="process-resp"]', fromSide: 'bottom', to: '[data-info="denied"]', toSide: 'top', type: 'control' },
+                { from: '[data-info="granted"]', fromSide: 'bottom', to: '[data-info="servo"]', toSide: 'top', type: 'control' },
+                { from: '[data-info="process-resp"]', fromSide: 'bottom', to: '[data-info="remote-unlock"]', toSide: 'top', type: 'control' },
+
+                // Remote unlock path
+                { from: '[data-info="remote-unlock"]', fromSide: 'left', to: '[data-info="servo"]', toSide: 'right', type: 'control' },
+
+                // Gateway to VPS
+                { from: '[data-info="log-access"]', fromSide: 'right', to: '[data-info="vps-broker"]', toSide: 'left', type: 'vps' },
+                { from: '[data-info="vps-broker"]', fromSide: 'right', to: '[data-info="vps-logs"]', toSide: 'top', type: 'vps' },
+                { from: '[data-info="vps-broker"]', fromSide: 'right', to: '[data-info="vps-users"]', toSide: 'bottom', type: 'vps' },
+
+                // VPS remote command
+                { from: '[data-info="vps-api"]', fromSide: 'left', to: '[data-info="vps-broker"]', toSide: 'right', type: 'vps' },
+                { from: '[data-info="vps-broker"]', fromSide: 'left', to: '[data-info="remote-cmd"]', toSide: 'right', type: 'vps' },
+                { from: '[data-info="remote-cmd"]', fromSide: 'left', to: '[data-info="mqtt-broker"]', toSide: 'right', type: 'control' },
+            ];
+            
+            connections.forEach(conn => {
+                const fromNode = document.querySelector(conn.from);
+                const toNode = document.querySelector(conn.to);
+
+                if (!fromNode || !toNode) return;
+
+                const start = getNodeSide(fromNode, conn.fromSide);
+                const end = getNodeSide(toNode, conn.toSide);
+                const type = conn.type;
+
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                
+                const dx = end.x - start.x;
+                const dy = end.y - start.y;
+                
+                let pathData = `M ${start.x} ${start.y} C ${start.x + dx * 0.5} ${start.y}, ${end.x - dx * 0.5} ${end.y}, ${end.x} ${end.y}`;
+
+                if (Math.abs(dy) > Math.abs(dx)) {
+                     pathData = `M ${start.x} ${start.y} C ${start.x} ${start.y + dy * 0.5}, ${end.x} ${end.y - dy * 0.5}, ${end.x} ${end.y}`;
+                }
+
+                path.setAttribute('d', pathData);
+                
+                if (type === 'auth') {
+                    path.classList.add('connection-auth');
+                    path.setAttribute('marker-end', 'url(#arrowAuth)');
+                } else if (type === 'control') {
+                    path.classList.add('connection-control');
+                    path.setAttribute('marker-end', 'url(#arrowControl)');
+                } else if (type === 'vps') {
+                    path.classList.add('connection-vps');
+                    path.setAttribute('marker-end', 'url(#arrowVPS)');
+                } else {
+                    path.classList.add('connection-line');
+                    path.setAttribute('marker-end', 'url(#arrowStatus)');
+                }
+                
+                svg.appendChild(path);
+            });
+        }
+        
+        window.addEventListener('load', drawConnections);
+        window.addEventListener('resize', drawConnections);
+        const nodeInfo = {
+            'passkey-device': {
+                title: '🔐 ESP8266 Door Lock Controller',
+                sections: [
+                    {heading: 'Phần cứng', content: '<ul><li>Keypad 4x3 matrix</li><li>Servo motor (180°)</li><li>LED OK (green) - D0</li><li>LED ERROR (red) - D1</li><li>MAC: DE:AD:BE:EF:00:01</li></ul>'},
+                    {heading: 'Chức năng', content: '<ul><li>Nhận mật khẩu 6 số</li><li>Hash + HMAC authentication</li><li>Điều khiển servo lock</li><li>Remote unlock từ VPS</li></ul>'},
+                    {heading: 'Security', content: '<ul><li>SHA256 password hashing</li><li>HMAC-SHA256 signature</li><li>TLS MQTT connection</li><li>Nonce + timestamp</li></ul>'}
+                ]
+            },
+            'keypad': {
+                title: '⌨️ Keypad Matrix 4x3',
+                sections: [
+                    {heading: 'Layout', content: '<div class="code-block">1  2  3<br>4  5  6<br>7  8  9<br>*  0  #</div>'},
+                    {heading: 'Pins', content: '<ul><li>Rows: D2, D3, D4, D1</li><li>Cols: D5, D6, D7</li></ul>'},
+                    {heading: 'Features', content: '<ul><li>Scan mỗi loop cycle</li><li>Debounce tự động</li><li>Visual feedback (LED blink)</li></ul>'}
+                ]
+            },
+            'pw-buffer': {
+                title: '📝 Password Buffer',
+                sections: [
+                    {heading: 'Chức năng', content: '<p>Thu thập 6 chữ số từ keypad trước khi gửi authentication request.</p>'},
+                    {heading: 'Logic', content: '<div class="code-block">String curPw = "";<br>char k = keypad.getKey();<br>if (k) {<br>&nbsp;&nbsp;curPw += k;<br>&nbsp;&nbsp;if (curPw.length() == 6) {<br>&nbsp;&nbsp;&nbsp;&nbsp;sendUnlockRequest(curPw);<br>&nbsp;&nbsp;}<br>}</div>'},
+                    {heading: 'Timeout', content: '<ul><li>10 giây không nhập → xóa buffer</li><li>Visual warning (red LED blink)</li></ul>'}
+                ]
+            },
+            'sha256': {
+                title: '🔒 SHA256 Password Hashing',
+                sections: [
+                    {heading: 'Chức năng', content: '<p>Hash mật khẩu với salt để bảo mật, không bao giờ gửi plaintext.</p>'},
+                    {heading: 'Algorithm', content: '<div class="code-block">String calc_sha256_hex(String data) {<br>&nbsp;&nbsp;String salted = DEVICE_SALT + data;<br>&nbsp;&nbsp;br_sha256_context ctx;<br>&nbsp;&nbsp;br_sha256_init(&ctx);<br>&nbsp;&nbsp;br_sha256_update(&ctx, salted);<br>&nbsp;&nbsp;br_sha256_out(&ctx, hash);<br>&nbsp;&nbsp;return hex_string; // 64 chars<br>}</div>'},
+                    {heading: 'Salt', content: '<p>DEVICE_SALT = "passkey_01_salt_2025"</p>'},
+                    {heading: 'Output', content: '<p>64-character hexadecimal string</p>'}
+                ]
+            },
+            'build-req': {
+                title: '📦 Build Authentication Request',
+                sections: [
+                    {heading: 'JSON Body', content: '<div class="code-block">{<br>&nbsp;&nbsp;"cmd": "unlock_request",<br>&nbsp;&nbsp;"client_id": "passkey_01",<br>&nbsp;&nbsp;"pw": "abc123...def", // SHA256 hash<br>&nbsp;&nbsp;"ts": 1730904123,<br>&nbsp;&nbsp;"nonce": 1847362<br>}</div>'},
+                    {heading: 'Fields', content: '<ul><li><b>cmd:</b> Request type</li><li><b>client_id:</b> Device identifier</li><li><b>pw:</b> SHA256 password hash</li><li><b>ts:</b> Unix timestamp</li><li><b>nonce:</b> Random number (replay attack prevention)</li></ul>'}
+                ]
+            },
+            'hmac': {
+                title: '✍️ HMAC-SHA256 Signature',
+                sections: [
+                    {heading: 'Purpose', content: '<p>Đảm bảo request không bị chỉnh sửa trong quá trình truyền (integrity check).</p>'},
+                    {heading: 'Shared Key', content: '<div class="code-block">const uint8_t HMAC_KEY[32] = {<br>&nbsp;&nbsp;0x5A, 0x5A, 0x2B, 0x3F, ...<br>};</div>'},
+                    {heading: 'Calculation', content: '<div class="code-block">String sig = calc_hmac_sha256_hex(bodyStr);<br>// Uses BearSSL HMAC functions<br>// Output: 64-char hex string</div>'},
+                    {heading: 'Final Payload', content: '<div class="code-block">{<br>&nbsp;&nbsp;"body": "{...JSON body...}",<br>&nbsp;&nbsp;"hmac": "abc123...def"<br>}</div>'}
+                ]
+            },
+            'mqtt-pub-req': {
+                title: '📤 Publish Authentication Request',
+                sections: [
+                    {heading: 'Topic', content: '<p>home/devices/passkey_01/request</p>'},
+                    {heading: 'QoS', content: '<p>QoS 0 - Fire and forget (fast response)</p>'},
+                    {heading: 'Code', content: '<div class="code-block">mqtt.publish(topic_req, payload.c_str(), false);<br>waitingForReply = true;</div>'}
+                ]
+            },
+            'wait-resp': {
+                title: '⏳ Wait for Gateway Response',
+                sections: [
+                    {heading: 'State', content: '<ul><li>Set flag: waitingForReply = true</li><li>Block keypad input</li><li>Monitor timeout</li></ul>'},
+                    {heading: 'Timeout', content: '<div class="code-block">if (waitingForReply && millis() - lastKeyPress > 15000) {<br>&nbsp;&nbsp;waitingForReply = false;<br>&nbsp;&nbsp;blinkLED(LED_ERR, 3, 300);<br>}</div>'},
+                    {heading: 'User Experience', content: '<p>Người dùng nhìn thấy LED nhấp nháy trong khi chờ.</p>'}
+                ]
+            },
+            'mqtt-sub-resp': {
+                title: '📥 Subscribe Command Topic',
+                sections: [
+                    {heading: 'Topic', content: '<p>home/devices/passkey_01/command</p>'},
+                    {heading: 'QoS', content: '<p>QoS 1 - At least once (guaranteed delivery)</p>'},
+                    {heading: 'Commands', content: '<ul><li><b>OPEN:</b> Access granted</li><li><b>LOCK:</b> Access denied</li><li><b>remote_unlock:</b> Remote access</li><li><b>remote_lock:</b> Remote lock</li><li><b>update_config:</b> Settings</li></ul>'}
+                ]
+            },
+            'process-resp': {
+                title: '🔍 Process Gateway Response',
+                sections: [
+                    {heading: 'Parse Command', content: '<div class="code-block">const char* cmd = doc["cmd"];<br>if (strcmp(cmd, "OPEN") == 0) {<br>&nbsp;&nbsp;// Access granted<br>} else if (strcmp(cmd, "LOCK") == 0) {<br>&nbsp;&nbsp;// Access denied<br>&nbsp;&nbsp;const char* reason = doc["reason"];<br>}</div>'},
+                    {heading: 'Deny Reasons', content: '<ul><li>invalid_password</li><li>inactive_password</li><li>expired_password</li><li>invalid_signature</li><li>missing_hmac</li></ul>'}
+                ]
+            },
+            'granted': {
+                title: '✅ Access Granted - Open Door',
+                sections: [
+                    {heading: 'Actions', content: '<ul><li>Servo rotate to 180°</li><li>Green LED ON for 2s</li><li>Clear waiting flag</li><li>Reset failure counter</li><li>Publish status to MQTT</li></ul>'},
+                    {heading: 'Code', content: '<div class="code-block">doorServo.write(180);<br>digitalWrite(LED_OK, HIGH);<br>delay(2000);<br>doorServo.write(0); // Auto-lock<br>digitalWrite(LED_OK, LOW);</div>'},
+                    {heading: 'Status Message', content: '<div class="code-block">{"state": "OPENED", "timestamp": ...}</div>'}
+                ]
+            },
+            'denied': {
+                title: '❌ Access Denied - Keep Locked',
+                sections: [
+                    {heading: 'Actions', content: '<ul><li>Servo stays at 0° (locked)</li><li>Red LED ON for 1.5s</li><li>Log deny reason</li><li>Increment failure counter</li><li>Publish status</li></ul>'},
+                    {heading: 'Code', content: '<div class="code-block">doorServo.write(0);<br>digitalWrite(LED_ERR, HIGH);<br>delay(1500);<br>digitalWrite(LED_ERR, LOW);<br>consecutiveFailures++;</div>'},
+                    {heading: 'Rate Limiting', content: '<p>Sau nhiều lần thất bại → delay 30s để chống brute force.</p>'}
+                ]
+            },
+            'servo': {
+                title: '🔓 Servo Motor Control',
+                sections: [
+                    {heading: 'Hardware', content: '<ul><li>Pin: D8</li><li>Range: 0° to 180°</li><li>Power: External 5V recommended</li></ul>'},
+                    {heading: 'Positions', content: '<ul><li><b>0° =</b> LOCKED position</li><li><b>180° =</b> UNLOCKED position</li></ul>'},
+                    {heading: 'Code', content: '<div class="code-block">Servo doorServo;<br>doorServo.attach(D8);<br><br>// Lock<br>doorServo.write(0);<br><br>// Unlock<br>doorServo.write(180);</div>'}
+                ]
+            },
+            'remote-unlock': {
+                title: '📱 Remote Unlock Handler',
+                sections: [
+                    {heading: 'Trigger', content: '<p>Nhận lệnh remote_unlock từ VPS qua Gateway.</p>'},
+                    {heading: 'Parameters', content: '<ul><li><b>duration_ms:</b> Thời gian mở cửa (default 5s, max 30s)</li><li><b>user:</b> Người thực hiện</li><li><b>reason:</b> Lý do mở cửa</li><li><b>command_id:</b> Unique ID để tracking</li></ul>'},
+                    {heading: 'Flow', content: '<div class="code-block">handleRemoteUnlock(doc) {<br>&nbsp;&nbsp;check if remote_enabled<br>&nbsp;&nbsp;validate duration<br>&nbsp;&nbsp;executeUnlock("remote", duration)<br>&nbsp;&nbsp;log access event<br>&nbsp;&nbsp;send ACK to VPS<br>}</div>'},
+                    {heading: 'Auto-Lock', content: '<p>Sau khi hết duration → tự động khóa lại.</p>'}
+                ]
+            },
+            'mqtt-broker': {
+                title: '🔄 Local MQTT Broker',
+                sections: [
+                    {heading: 'Config', content: '<ul><li>Host: 192.168.1.205</li><li>Port: 1884 (TLS)</li><li>Auth: Username/Password</li></ul>'},
+                    {heading: 'Topics', content: '<ul><li>home/devices/passkey_01/request</li><li>home/devices/passkey_01/command</li><li>home/devices/passkey_01/status</li></ul>'},
+                    {heading: 'Security', content: '<ul><li>TLS 1.2 encryption</li><li>Client certificates</li><li>Keep-alive: 60s</li></ul>'}
+                ]
+            },
+            'gw-sub': {
+                title: '📡 Gateway - Subscribe Topics',
+                sections: [
+                    {heading: 'Topics', content: '<ul><li>local_passkey_request</li><li>local_passkey_status</li></ul>'},
+                    {heading: 'Code Python', content: '<div class="code-block">topics = [<br>&nbsp;&nbsp;config["topics"]["local_passkey_request"],<br>&nbsp;&nbsp;config["topics"]["local_passkey_status"]<br>]<br>for topic in topics:<br>&nbsp;&nbsp;client.subscribe(topic, qos=1)</div>'}
+                ]
+            },
+            'gw-hmac': {
+                title: '🔐 Gateway - HMAC Verification',
+                sections: [
+                    {heading: 'Purpose', content: '<p>Verify request không bị chỉnh sửa và đến từ thiết bị hợp lệ.</p>'},
+                    {heading: 'Code', content: '<div class="code-block">def verify_hmac(body_str, received_hmac):<br>&nbsp;&nbsp;calculated = hmac.new(<br>&nbsp;&nbsp;&nbsp;&nbsp;HMAC_KEY,<br>&nbsp;&nbsp;&nbsp;&nbsp;body_str.encode(),<br>&nbsp;&nbsp;&nbsp;&nbsp;hashlib.sha256<br>&nbsp;&nbsp;).hexdigest()<br>&nbsp;&nbsp;<br>&nbsp;&nbsp;return hmac.compare_digest(<br>&nbsp;&nbsp;&nbsp;&nbsp;calculated, received_hmac<br>&nbsp;&nbsp;)</div>'},
+                    {heading: 'Security', content: '<ul><li>Timing-safe comparison</li><li>Shared secret key</li><li>Reject nếu không match</li></ul>'}
+                ]
+            },
+            'db-lookup': {
+                title: '💾 Database Password Lookup',
+                sections: [
+                    {heading: 'Structure', content: '<div class="code-block">{<br>&nbsp;&nbsp;"passwords": {<br>&nbsp;&nbsp;&nbsp;&nbsp;"pwd_001": {<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"hash": "abc123...",<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"active": true,<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"expires_at": "2025-12-31",<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"user_id": "00002"<br>&nbsp;&nbsp;&nbsp;&nbsp;}<br>&nbsp;&nbsp;}<br>}</div>'},
+                    {heading: 'Validation', content: '<ul><li>Match hash với database</li><li>Check active status</li><li>Check expiration date</li><li>Return: granted/denied + reason</li></ul>'},
+                    {heading: 'Code', content: '<div class="code-block">def verify_password(hash):<br>&nbsp;&nbsp;for pwd_id, data in passwords.items():<br>&nbsp;&nbsp;&nbsp;&nbsp;if data["hash"] == hash:<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;if not data["active"]:<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return False, "inactive"<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# Check expiry...<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return True, None<br>&nbsp;&nbsp;return False, "invalid"</div>'}
+                ]
+            },
+            'gw-pub': {
+                title: '📤 Gateway - Send Response',
+                sections: [
+                    {heading: 'Response Format', content: '<div class="code-block">{<br>&nbsp;&nbsp;"cmd": "OPEN", // or "LOCK"<br>&nbsp;&nbsp;"reason": null, // or deny reason<br>&nbsp;&nbsp;"timestamp": "20251106_143022"<br>}</div>'},
+                    {heading: 'Topic', content: '<p>home/devices/passkey_01/command</p>'},
+                    {heading: 'QoS', content: '<p>QoS 1 - Guaranteed delivery</p>'}
+                ]
+            },
+            'log-access': {
+                title: '📝 Log Access Event',
+                sections: [
+                    {heading: 'Event Data', content: '<div class="code-block">{<br>&nbsp;&nbsp;"gateway_id": "Gateway2",<br>&nbsp;&nbsp;"device_id": "passkey_01",<br>&nbsp;&nbsp;"password_id": "pwd_001",<br>&nbsp;&nbsp;"result": "granted", // or "denied"<br>&nbsp;&nbsp;"method": "passkey",<br>&nbsp;&nbsp;"deny_reason": null,<br>&nbsp;&nbsp;"timestamp": "20251106_143022"<br>}</div>'},
+                    {heading: 'Destinations', content: '<ul><li>Local log file</li><li>Forward to VPS via MQTT</li><li>Store in VPS database</li></ul>'},
+                    {heading: 'Purpose', content: '<ul><li>Audit trail</li><li>Security monitoring</li><li>User activity tracking</li></ul>'}
+                ]
+            },
+            'remote-cmd': {
+                title: '🎮 Remote Command Handler',
+                sections: [
+                    {heading: 'Subscribe Topic', content: '<p>gateway/Gateway2/command/+</p>'},
+                    {heading: 'Commands', content: '<ul><li><b>unlock:</b> Mở cửa remote</li><li><b>lock:</b> Khóa cửa remote</li></ul>'},
+                    {heading: 'Flow', content: '<div class="code-block">def handle_remote_command(topic, data):<br>&nbsp;&nbsp;command = data["command"]<br>&nbsp;&nbsp;user_id = data["user_id"]<br>&nbsp;&nbsp;<br>&nbsp;&nbsp;if command == "unlock":<br>&nbsp;&nbsp;&nbsp;&nbsp;duration = data.get("duration", 5)<br>&nbsp;&nbsp;&nbsp;&nbsp;send_unlock_response(device_id, True)<br>&nbsp;&nbsp;&nbsp;&nbsp;log_remote_access(user_id, "granted")<br>&nbsp;&nbsp;<br>&nbsp;&nbsp;elif command == "lock":<br>&nbsp;&nbsp;&nbsp;&nbsp;send_unlock_response(device_id, False)</div>'},
+                    {heading: 'Security', content: '<ul><li>Validate user permissions</li><li>Log all remote actions</li><li>Rate limiting</li></ul>'}
+                ]
+            },
+            'vps-broker': {
+                title: '☁️ VPS MQTT Broker',
+                sections: [
+                    {heading: 'Config', content: '<ul><li>Host: 159.223.63.61</li><li>Port: 8883 (TLS)</li><li>Public internet</li></ul>'},
+                    {heading: 'Topics', content: '<ul><li>gateway/Gateway2/access/{device}</li><li>gateway/Gateway2/status/{device}</li><li>gateway/Gateway2/command/{device}</li><li>gateway/Gateway2/sync/trigger</li></ul>'}
+                ]
+            },
+            'vps-logs': {
+                title: '📊 VPS Access Logs Database',
+                sections: [
+                    {heading: 'Collections', content: '<ul><li>access_logs: Tất cả access attempts</li><li>devices: Device metadata</li><li>users: User permissions</li></ul>'},
+                    {heading: 'Queries', content: '<ul><li>Get access history by user</li><li>Get access history by device</li><li>Failed attempts analysis</li><li>Time-based reports</li></ul>'},
+                    {heading: 'Retention', content: '<p>Keep logs for audit compliance (1-3 years)</p>'}
+                ]
+            },
+            'vps-users': {
+                title: '👥 User Management System',
+                sections: [
+                    {heading: 'Features', content: '<ul><li>Create/update/delete passwords</li><li>Set expiration dates</li><li>Active/inactive status</li><li>Permission levels</li></ul>'},
+                    {heading: 'Password Sync', content: '<p>Sync với Gateway database mỗi 5s để đảm bảo consistency.</p>'},
+                    {heading: 'Web Interface', content: '<ul><li>Admin dashboard</li><li>User self-service</li><li>Bulk operations</li></ul>'}
+                ]
+            },
+            'vps-api': {
+                title: '🌐 Remote Access API',
+                sections: [
+                    {heading: 'Endpoints', content: '<ul><li>POST /api/unlock/{gateway}/{device}</li><li>POST /api/lock/{gateway}/{device}</li><li>GET /api/access-logs/{gateway}/{device}</li><li>POST /api/password/create</li></ul>'},
+                    {heading: 'Flow', content: '<div class="code-block">Web/Mobile App<br>&nbsp;&nbsp;↓ HTTPS Request<br>VPS API Server<br>&nbsp;&nbsp;↓ Validate JWT + Permissions<br>Publish to MQTT<br>&nbsp;&nbsp;↓<br>Gateway receives<br>&nbsp;&nbsp;↓<br>Forward to ESP device<br>&nbsp;&nbsp;↓<br>Door unlocks</div>'},
+                    {heading: 'Security', content: '<ul><li>JWT authentication</li><li>Role-based access control</li><li>Rate limiting</li><li>Audit logging</li></ul>'}
+                ]
+            }
+        };
+        
+        document.querySelectorAll('.node').forEach(node => {
+            node.addEventListener('click', function() {
+                const infoKey = this.getAttribute('data-info');
+                const info = nodeInfo[infoKey];
+                
+                if (!info) return;
+                
+                let html = `<h3>${info.title}</h3>`;
+                
+                info.sections.forEach(section => {
+                    html += `
+                        <div class="info-section">
+                            <h4>${section.heading}</h4>
+                            ${section.content}
+                        </div>
+                    `;
+                });
+                
+                document.getElementById('infoPanelContent').innerHTML = html;
+                document.getElementById('infoPanel').classList.add('active');
+            });
+        });
+        
+        function closeInfo() {
+            document.getElementById('infoPanel').classList.remove('active');
+        }
+    </script>
+</body>
+</html>

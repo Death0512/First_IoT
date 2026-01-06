@@ -33,7 +33,7 @@ CONFIG = {
     },
     
     'vps_broker': {
-        'host': '159.223.63.61',
+        'host': '18.143.176.27',
         'port': 8883,
         'use_tls': True,
         'ca_cert': './certs/ca.cert.pem',
@@ -41,7 +41,7 @@ CONFIG = {
         'client_key': './certs/gateway3.key.pem',
     },
     
-    'vps_api_url': 'http://159.223.63.61:3000',
+    'vps_api_url': 'http://18.143.176.27:3000',
     
     'topics': {
         'local_temp_telemetry': 'home/devices/temp_01/telemetry',

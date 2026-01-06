@@ -18,8 +18,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ============= CONFIGURATION =============
-# HMAC Key - must match ESP device
 HMAC_KEY = bytes([
     0x5A, 0x5A, 0x2B, 0x3F, 0x87, 0xDA, 0x01, 0xF9,
     0xDE, 0xE1, 0x83, 0xAD, 0x84, 0x54, 0xB5, 0x34,
@@ -43,7 +41,7 @@ CONFIG = {
     },
     
     'vps_broker': {
-        'host': '159.223.63.61',
+        'host': '18.143.176.27',
         'port': 8883,
         'use_tls': True,
         'ca_cert': './certs/ca.cert.pem',
@@ -51,7 +49,7 @@ CONFIG = {
         'client_key': './certs/gateway2.key.pem',
     },
     
-    'vps_api_url': 'http://159.223.63.61:3000',
+    # 'vps_api_url': 'http://18.143.176.27:3000',
     
     'topics': {
         'local_passkey_request': 'home/devices/passkey_01/request',
@@ -65,10 +63,9 @@ CONFIG = {
     
     'db_path': './data',
     'devices_db': 'devices.json',
-    'heartbeat_interval': 30,  # Changed from 300 to 30 seconds
+    'heartbeat_interval': 30, 
 }
 
-# ============= DATABASE MANAGER =============
 class DatabaseManager:
     def __init__(self, db_path, devices_db):
         self.db_path = db_path
@@ -80,7 +77,7 @@ class DatabaseManager:
         if os.path.exists(self.devices_file):
             with open(self.devices_file, 'r') as f:
                 return json.load(f)
-        return {'passwords': {}, 'rfid_cards': {}, 'devices': {}}
+        return {'passwords': {}, 'devices': {}}
     
     def save_devices(self):
         backup_file = f"{self.devices_file}.backup"
@@ -222,17 +219,14 @@ class MQTTManager:
             self.reconnect_attempts = 0
             logger.info(" Connected to VPS Broker")
 
-            # Subscribe to sync trigger
             sync_topic = self.config['topics']['sync_trigger']
             client.subscribe(sync_topic, qos=1)
             logger.info(f" Subscribed to sync trigger: {sync_topic}")
 
-            # Subscribe to command topic to receive remote commands
             command_topic = f"gateway/{self.config['gateway_id']}/command/+"
             client.subscribe(command_topic, qos=1)
             logger.info(f" Subscribed to command topic: {command_topic}")
-
-            # Send immediate online status upon connection
+n
             self.publish_gateway_status('online')
         else:
             logger.error(f" VPS Connection Failed: {rc}")
@@ -293,16 +287,14 @@ class MQTTManager:
                 self.sync_manager.trigger_immediate_sync()
 
             elif 'command' in msg.topic:
-                # Handle remote commands from VPS
                 data = json.loads(msg.payload.decode())
                 self.handle_remote_command(msg.topic, data)
         except Exception as e:
             logger.error(f"Error processing VPS message: {e}")
 
     def handle_remote_command(self, topic, data):
-        """Handle remote unlock/lock commands from VPS"""
         try:
-            # Parse topic: gateway/Gateway2/command/passkey_01
+            # topic: gateway/Gateway2/command/passkey_01
             parts = topic.split('/')
             if len(parts) < 4:
                 logger.warning(f"[REMOTE CMD] Invalid topic format: {topic}")
@@ -315,18 +307,14 @@ class MQTTManager:
 
             logger.info(f"[REMOTE CMD] Received {command} for {device_id} from user {user_id}")
 
-            # Handle unlock command
             if command == 'unlock':
                 duration = data.get('params', {}).get('duration', 5)
                 logger.info(f"[REMOTE CMD] Unlocking {device_id} for {duration}s")
 
-                # Send unlock command to local device
                 self.send_unlock_response(device_id, granted=True, deny_reason=None)
 
-                # Log access event to VPS
                 self.log_remote_access(device_id, user_id, 'granted', 'remote', command_id)
 
-            # Handle lock command
             elif command == 'lock':
                 logger.info(f"[REMOTE CMD] Locking {device_id}")
                 self.send_unlock_response(device_id, granted=False, deny_reason='remote_lock')
@@ -339,7 +327,6 @@ class MQTTManager:
             logger.error(f"[REMOTE CMD] Error handling remote command: {e}")
 
     def log_remote_access(self, device_id, user_id, result, method, command_id=None):
-        """Log remote access event to VPS"""
         try:
             payload = {
                 'gateway_id': self.config['gateway_id'],
@@ -362,16 +349,13 @@ class MQTTManager:
             logger.error(f"[REMOTE ACCESS] Error logging to VPS: {e}")
 
     def verify_hmac(self, body_str, received_hmac):
-        """Verify HMAC-SHA256 signature"""
         try:
-            # Calculate HMAC
             calculated_hmac = hmac.new(
                 HMAC_KEY,
                 body_str.encode('utf-8'),
                 hashlib.sha256
             ).hexdigest()
 
-            # Compare
             return hmac.compare_digest(calculated_hmac, received_hmac)
         except Exception as e:
             logger.error(f"[HMAC] Verification error: {e}")
@@ -379,7 +363,6 @@ class MQTTManager:
 
     def handle_passkey_request(self, data):
         try:
-            # Parse nested JSON body
             body_str = data.get('body')
             hmac_sig = data.get('hmac')
 
@@ -393,7 +376,6 @@ class MQTTManager:
                 self.send_unlock_response('passkey_01', False, 'missing_hmac')
                 return
 
-            # Verify HMAC signature
             if not self.verify_hmac(body_str, hmac_sig):
                 logger.error("[PASSKEY] HMAC verification failed - message rejected")
                 self.send_unlock_response('passkey_01', False, 'invalid_signature')
@@ -401,7 +383,6 @@ class MQTTManager:
 
             logger.debug("[PASSKEY] HMAC verification passed")
 
-            # Parse body JSON string
             try:
                 body = json.loads(body_str)
             except json.JSONDecodeError as e:
@@ -409,7 +390,6 @@ class MQTTManager:
                 self.send_unlock_response('passkey_01', False, 'invalid_json')
                 return
 
-            # Extract fields from body
             password_hash = body.get('pw')
             device_id = body.get('client_id', 'passkey_01')
 
