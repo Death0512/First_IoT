@@ -22,7 +22,7 @@ CONFIG = {
     'user_id': '00003',
     
     'local_broker': {
-        'host': '192.168.1.205',
+        'host': '192.168.1.209',
         'port': 1884,
         'use_tls': True,
         'ca_cert': './certs/ca.cert.pem',
@@ -33,7 +33,7 @@ CONFIG = {
     },
     
     'vps_broker': {
-        'host': '18.143.176.27',
+        'host': '47.128.146.122',
         'port': 8883,
         'use_tls': True,
         'ca_cert': './certs/ca.cert.pem',
@@ -41,7 +41,7 @@ CONFIG = {
         'client_key': './certs/gateway3.key.pem',
     },
     
-    'vps_api_url': 'http://18.143.176.27:3000',
+    'vps_api_url': 'http://47.128.146.122:3000',
     
     'topics': {
         'local_temp_telemetry': 'home/devices/temp_01/telemetry',

@@ -1,12 +1,12 @@
 #!/bin/bash
 # =========================================================
 # Deploy Certificates to VPS
-# VPS IP: 18.143.176.27
+# VPS IP: 47.128.146.122
 # =========================================================
 
 VPS_USER="root"
-VPS_IP="18.143.176.27"
-VPS_CERT_DIR="/opt/iot/mosquitto/certs"
+VPS_IP="47.128.146.122"
+VPS_CERT_DIR="/root/Server_Python/mosquitto/certs"
 
 echo "==========================================================="
 echo " Deploying Certificates to VPS: $VPS_IP"
@@ -24,7 +24,7 @@ scp server.full.pem $VPS_USER@$VPS_IP:$VPS_CERT_DIR/
 scp server.csr.pem $VPS_USER@$VPS_IP:$VPS_CERT_DIR/
 
 echo "[3/3] Restarting Mosquitto service..."
-ssh $VPS_USER@$VPS_IP "cd /opt/iot && docker-compose restart mosquitto"
+ssh $VPS_USER@$VPS_IP "cd /root/Server_Python && docker-compose restart mosquitto"
 
 echo ""
 echo "==========================================================="

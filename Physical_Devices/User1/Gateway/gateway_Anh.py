@@ -25,7 +25,7 @@ CONFIG = {
     'user_id': '00001',
     
     'vps_broker': {
-        'host': '18.143.176.27',
+        'host': '47.128.146.122',
         'port': 8883,
         'use_tls': True,
         'ca_cert': './certs/ca.cert.pem',
@@ -33,7 +33,7 @@ CONFIG = {
         'client_key': './certs/gateway1.key.pem',
     },
     
-    'vps_api_url': '18.143.176.27',
+    'vps_api_url': 'http://47.128.146.122:3000',
     
     'lora_serial': {
         'port': 'COM6',
