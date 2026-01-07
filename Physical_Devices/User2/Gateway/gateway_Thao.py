@@ -49,7 +49,7 @@ CONFIG = {
         'client_key': './certs/gateway2.key.pem',
     },
     
-    # 'vps_api_url': 'http://47.128.146.122:3000',
+    'vps_api_url': 'http://47.128.146.122:3000',
     
     'topics': {
         'local_passkey_request': 'home/devices/passkey_01/request',
