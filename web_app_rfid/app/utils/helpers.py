@@ -9,20 +9,31 @@ print("[DEBUG HELPERS FILE] Đang chạy helpers từ:", __file__)
 TZ = ZoneInfo("Asia/Bangkok")
 file_lock = threading.Lock()
 
+# ⚠️ CRITICAL: SALT phải giống với ESP8266 device (dòng 22 trong main.cpp)
+PASSKEY_SALT = "passkey_01_salt_2025"
+
 def now_iso(): 
     return datetime.now(TZ).isoformat(timespec="seconds")
 
 
 
 def sha256_hex(s) -> str:
-    """SHA256 chuẩn – nhận cả str hoặc bytes."""
+    """
+    SHA256 với SALT - PHẢI GIỐNG VỚI ESP8266!
+    ESP8266: SHA256(SALT + password)
+    """
     import hashlib
-    if isinstance(s, bytes):
-        b = s
+    
+    # Thêm SALT vào đầu giống ESP8266
+    salted_input = PASSKEY_SALT + str(s)
+    
+    if isinstance(salted_input, bytes):
+        b = salted_input
     else:
-        b = str(s).encode("utf-8")
+        b = str(salted_input).encode("utf-8")
     h = hashlib.sha256(b).hexdigest()
     return h
+
 
 def parse_iso(s: str) -> datetime:
     try:

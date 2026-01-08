@@ -157,11 +157,20 @@ class DatabaseSyncManager:
             needs_update = server_data.get('needs_update', False)
             
             if needs_update:
-                logger.info(f"[SYNC] Database update available")
+                logger.info(f"[SYNC] 🔄 Database update available - syncing...")
                 success = self.apply_database_update(server_data)
                 if success:
                     self.sync_count += 1
                     self.last_sync_time = datetime.now()
+                    
+                    # Show prominent success message
+                    stats = server_data.get('stats', {})
+                    logger.info("="*70)
+                    logger.info(f"[SYNC] ✅ DATABASE SYNC COMPLETED SUCCESSFULLY!")
+                    logger.info(f"[SYNC]    New passkeys are now ready to use")
+                    logger.info(f"[SYNC]    Current data: {stats.get('passwords_count', 0)} passkeys, "
+                              f"{stats.get('rfid_cards_count', 0)} RFID cards")
+                    logger.info("="*70)
                     return True
                 else:
                     self.sync_errors += 1
@@ -227,8 +236,14 @@ class DatabaseSyncManager:
     
     def trigger_immediate_sync(self):
         """Trigger immediate sync (called when receiving MQTT sync trigger)"""
-        logger.info("[SYNC] Immediate sync triggered")
-        return self.perform_sync()
+        logger.info("="*70)
+        logger.info("[SYNC] 📢 IMMEDIATE SYNC TRIGGERED from web app!")
+        logger.info("[SYNC]    Fetching latest database updates...")
+        logger.info("="*70)
+        result = self.perform_sync()
+        if not result:
+            logger.warning("[SYNC] ⚠️ Immediate sync failed - will retry in next cycle")
+        return result
     
     def get_stats(self):
         """Get sync statistics"""

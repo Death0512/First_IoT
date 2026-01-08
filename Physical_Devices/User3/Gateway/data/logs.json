@@ -218,5 +218,12 @@
     "timestamp": "2025-11-05T02:52:29+00:00",
     "device_id": "temp_01",
     "temperature": 36.2
+  },
+  {
+    "type": "alert",
+    "event": "high_temperature",
+    "timestamp": "2026-01-08T03:04:19+00:00",
+    "device_id": "temp_01",
+    "temperature": 31.8
   }
 ]

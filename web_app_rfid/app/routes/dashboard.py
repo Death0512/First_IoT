@@ -31,38 +31,51 @@ def overview_dashboard():
 def temperature_chart():
     """
     Lấy dữ liệu nhiệt độ / độ ẩm cho user hiện tại
-    + Trả về 30 bản ghi mới nhất để vẽ biểu đồ
+    + Trả về dữ liệu theo khoảng thời gian (hours parameter)
     + Có kèm dữ liệu 'hôm nay' (nhiệt độ, độ ẩm, icon)
     """
     user_id = str(request.args.get("user_id", "")).strip()
-    if not user_id:
-        return jsonify({"ok": False, "error": "missing_user_id"}), 400
+    device_id_param = str(request.args.get("device_id", "")).strip()
+    hours = request.args.get("hours", "24")
+    
+    try:
+        hours = int(hours)
+        if hours <= 0:
+            hours = 24
+    except:
+        hours = 24
+    
+    if not user_id and not device_id_param:
+        return jsonify({"ok": False, "error": "missing_user_id_or_device_id"}), 400
 
     conn = get_db()
     cur = conn.cursor()
 
-    # 1️⃣ Lấy device cảm biến của user
-    cur.execute("""
-    SELECT device_id
-    FROM user_devices_view
-    WHERE user_id = %s AND device_type ILIKE 'temperature%%'
-    LIMIT 1;
-""", (user_id,))
+    # 1️⃣ Lấy device cảm biến
+    if device_id_param:
+        device_id = device_id_param
+    else:
+        cur.execute("""
+        SELECT device_id
+        FROM user_devices_view
+        WHERE user_id = %s AND device_type ILIKE 'temperature%%'
+        LIMIT 1;
+    """, (user_id,))
+    
+        dev_row = cur.fetchone()
+        if not dev_row:
+            conn.close()
+            return jsonify({"ok": False, "error": "no_device", "msg": "User không có cảm biến nhiệt độ"}), 404
+    
+        device_id = dev_row["device_id"]
 
-    dev_row = cur.fetchone()
-    if not dev_row:
-        conn.close()
-        return jsonify({"ok": False, "error": "no_device", "msg": "User không có cảm biến nhiệt độ"}), 404
-
-    device_id = dev_row["device_id"]
-
-    # 2️⃣ Lấy 30 bản ghi mới nhất từ telemetry
-    cur.execute("""
+    # 2️⃣ Lấy dữ liệu theo khoảng thời gian
+    cur.execute(f"""
         SELECT time, temperature, humidity
         FROM telemetry
         WHERE device_id = %s
-        ORDER BY time DESC
-        LIMIT 30;
+          AND time >= NOW() - INTERVAL '{hours} hours'
+        ORDER BY time ASC
     """, (device_id,))
     rows = cur.fetchall()
 
@@ -70,13 +83,17 @@ def temperature_chart():
         conn.close()
         return jsonify({"ok": False, "error": "no_data"}), 404
 
-    latest = rows[0]
+
+    # Latest reading is the last record (most recent)
+    latest = rows[-1]
     latest_temp = latest["temperature"]
     latest_hum = latest["humidity"]
     latest_time = latest["time"]
 
-    # 3️⃣ Xác định icon phù hợp
-    if latest_temp >= 33:
+    # 3️⃣ Xác định icon phù hợp (handle None values)
+    if latest_temp is None:
+        icon = "❓"
+    elif latest_temp >= 33:
         icon = "🔥"
     elif latest_temp >= 28:
         icon = "☀️"
@@ -101,6 +118,6 @@ def temperature_chart():
         },
         "chart": [
             {"time": r["time"].isoformat(), "temp": r["temperature"], "hum": r["humidity"]}
-            for r in rows[::-1]  # đảo lại để thời gian tăng dần
+            for r in rows  # Đã được sắp xếp ASC, không cần đảo ngược
         ]
     })

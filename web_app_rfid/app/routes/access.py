@@ -23,8 +23,6 @@ def access_by_passcode(gateway_id, device_id):
     passcode = (data.get("passcode") or "").strip()
     frontend_uid = data.get("user_id")  # 🧩 user đang đăng nhập gửi lên
 
-    SALT = "passkey_01_salt_2025"
-
     if not passcode:
         return jsonify({"ok": False, "error": "missing_passcode"}), 400
 
@@ -53,25 +51,29 @@ def access_by_passcode(gateway_id, device_id):
             if not db_hash:
                 continue
 
-            # 🔒 chuẩn hóa hash -> bytes
+            # 🔒 chuẩn hóa hash -> string
             if isinstance(db_hash, memoryview):
-                db_hash = db_hash.tobytes()
+                db_hash = db_hash.tobytes().decode('utf-8')
+            elif isinstance(db_hash, (bytes, bytearray)):
+                db_hash = db_hash.decode('utf-8')
             elif isinstance(db_hash, str):
-                db_hash = db_hash.encode("utf-8")
-            elif isinstance(db_hash, (bytearray, bytes)):
-                db_hash = bytes(db_hash)
+                db_hash = db_hash  # Already string
             else:
                 print(f"[WARN] Unknown hash type: {type(db_hash)}")
                 continue
 
-            # ✅ So sánh passcode bằng bcrypt
+            # ✅ So sánh passcode - sha256_hex() ĐÃ TỰ THÊM SALT rồi!
             try:
-                if sha256_hex(SALT + passcode) == db_hash.decode() if isinstance(db_hash, (bytes, bytearray, memoryview)) else db_hash:
+                calculated_hash = sha256_hex(passcode)  # Không cần thêm SALT, helpers.py đã có
+                print(f"[DEBUG] Passcode hash: {calculated_hash[:32]}... vs DB: {db_hash[:32]}...")
+                
+                if calculated_hash == db_hash:
                     matched_pid = row["password_id"]
                     matched_uid = uid
+                    print(f"[SUCCESS] Password matched for user {uid}")
                     break
             except Exception as e:
-                print("[bcrypt error]", e)
+                print(f"[ERROR] Hash comparison error: {e}")
                 continue
 
         # 4️⃣ Kết quả xác thực

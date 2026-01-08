@@ -87,7 +87,6 @@
     elements.logoutBtn = document.getElementById('btn_logout');
 
     elements.sensorSelect = document.getElementById('sensor_select');
-    elements.sensorPeriod = document.getElementById('sensor_period');
     elements.temperatureEmpty = document.getElementById('temperature_empty');
     elements.temperatureSubtitle = document.getElementById('temperature_subtitle');
     elements.latestTemp = document.getElementById('latest_temp');
@@ -170,24 +169,19 @@
       loadTemperatureHistory();
     });
 
-    elements.sensorPeriod.addEventListener('change', () => {
-      if (!currentSensorId) return;
-      loadTemperatureHistory();
-    });
-
     elements.refreshAccess.addEventListener('click', () => {
-      loadAccessLogs(true).catch(() => {});
+      loadAccessLogs(true).catch(() => { });
     });
     if (elements.refreshPasskey) {
       elements.refreshPasskey.addEventListener('click', () => {
-        loadPasskeys(true).catch(() => {});
+        loadPasskeys(true).catch(() => { });
       });
     }
     elements.refreshRfid.addEventListener('click', () => {
-      loadRfidCards(true).catch(() => {});
+      loadRfidCards(true).catch(() => { });
     });
     elements.refreshDevices.addEventListener('click', () => {
-      loadDevices(true).catch(() => {});
+      loadDevices(true).catch(() => { });
     });
 
     if (elements.addRfidBtn) {
@@ -485,11 +479,12 @@
     return devicesCache
       .filter((device) => {
         const type = String(device.device_type || '').toLowerCase();
+        const id = String(device.device_id || '').toLowerCase();
+        // Only show temperature/climate sensors, exclude fan
         return (
-          type.includes('temp') ||
-          type.includes('climate') ||
-          type.includes('environment') ||
-          type.includes('sensor')
+          (type.includes('temp') || type.includes('climate') || type.includes('environment')) &&
+          !type.includes('fan') &&
+          !id.includes('fan')
         );
       })
       .map((device) => ({
@@ -754,7 +749,7 @@
         resetPasskeyState(false);
         setPasskeyStatus('Mở khoá thành công', 'success');
         showToast('success', 'Đã mở khoá thiết bị');
-        loadAccessLogs(true).catch(() => {});
+        loadAccessLogs(true).catch(() => { });
       } else {
         const message = data.deny_reason || 'Passkey không hợp lệ';
         setPasskeyStatus(message, 'error');
@@ -1286,15 +1281,32 @@
       return;
     }
 
-    const hours = parseInt(elements.sensorPeriod.value, 10) || 24;
+    // Always use 24 hours (period selector removed)
+    const hours = 24;
     const params = new URLSearchParams({
       device_id: currentSensorId,
       hours: String(hours)
     });
 
     try {
-      const res = await apiFetch(`/api/dashboard/temperature-history?${params.toString()}`);
-      const history = res?.data || res || [];
+      // Call Flask local endpoint directly (not VPS API)
+      const response = await fetch(`/dashboard/temperature?${params.toString()}`);
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const res = await response.json();
+
+      // Backend returns: {ok: true, chart: [...], latest: {...}}
+      const chartData = res?.chart || [];
+
+      // Map backend field names: temp -> temperature, hum -> humidity
+      const history = chartData.map(item => ({
+        time: item.time,
+        temperature: item.temp,
+        humidity: item.hum
+      }));
 
       if (history.length) {
         const latestPoint = history[history.length - 1];
@@ -1435,11 +1447,10 @@
             <td><span class="status-pill ${statusClass}">${status || 'unknown'}</span></td>
             <td>${formatDateTime(device.last_seen)}</td>
             <td>
-              ${
-                actions.length
-                  ? `<div class="action-buttons">${actions.join('')}</div>`
-                  : '<span class="muted">Không có hành động</span>'
-              }
+              ${actions.length
+            ? `<div class="action-buttons">${actions.join('')}</div>`
+            : '<span class="muted">Không có hành động</span>'
+          }
             </td>
           </tr>
         `;
@@ -1573,13 +1584,13 @@
     const supportedActions = ['fan_on', 'fan_off', 'unlock', 'lock'];
     if (supportedActions.includes(action)) {
       endpoint += `/${action}`;
-      
+
       // Thêm body cho unlock
       const options = { method: 'POST' };
       if (action === 'unlock') {
         options.body = { duration: 5 };  // Hoặc giá trị duration mong muốn
       }
-      
+
       const res = await apiFetch(endpoint, options);
       if (res?.success === false) {
         throw new Error(res.detail || res.message || 'Thiết bị phản hồi thất bại');

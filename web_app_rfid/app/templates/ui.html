@@ -1,11 +1,13 @@
 <!doctype html>
 <html lang="vi">
+
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>IoT Control Center</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/ui.css') }}">
 </head>
+
 <body>
   <div id="toast" class="toast hidden"></div>
 
@@ -64,15 +66,10 @@
       <div class="panel-header">
         <div>
           <h2 class="panel-title">Nhiệt độ &amp; Độ ẩm</h2>
-          <p class="panel-subtitle" id="temperature_subtitle">Chọn cảm biến để xem biểu đồ</p>
+          <p class="panel-subtitle" id="temperature_subtitle">Dữ liệu 24 giờ gần nhất</p>
         </div>
         <div class="panel-actions">
           <select id="sensor_select"></select>
-          <select id="sensor_period">
-            <option value="24">24 giờ</option>
-            <option value="72">3 ngày</option>
-            <option value="168">7 ngày</option>
-          </select>
         </div>
       </div>
       <div class="panel-body">
@@ -325,4 +322,5 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
   <script src="{{ url_for('static', filename='js/ui.js') }}" defer></script>
 </body>
+
 </html>

@@ -7,20 +7,20 @@
       "location": "Room",
       "communication": "Wifi",
       "status": "offline",
-      "registered_at": "2026-01-06T23:13:45.215499+07:00",
-      "last_seen": "2026-01-06T23:11:45.215499+07:00",
+      "registered_at": "2026-01-07T22:49:46.708351+07:00",
+      "last_seen": "2026-01-08T10:06:44+07:00",
       "metadata": null,
-      "updated_at": "2026-01-06T23:13:45.215499+07:00"
+      "updated_at": "2026-01-08T10:06:44+07:00"
     },
     "temp_01": {
       "device_type": "temperature sensor",
       "location": "Room",
       "communication": "Wifi",
-      "status": "offline",
-      "registered_at": "2026-01-06T23:13:45.213840+07:00",
-      "last_seen": "2026-01-06T23:11:45.213840+07:00",
+      "status": "online",
+      "registered_at": "2026-01-07T22:49:46.706582+07:00",
+      "last_seen": "2026-01-08T10:06:49+07:00",
       "metadata": null,
-      "updated_at": "2026-01-06T23:13:45.213840+07:00"
+      "updated_at": "2026-01-08T10:06:49+07:00"
     }
   }
 }
