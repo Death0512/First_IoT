@@ -323,6 +323,8 @@ class LoRaHandler:
             try:
                 if self.serial_port.in_waiting > 0:
                     data = self.serial_port.read(self.serial_port.in_waiting)
+                    if data:
+                        logger.info(f"[LoRa RAW] IN << {data.hex(' ').upper()}")
                     buffer.extend(data)
                     
                     while len(buffer) >= 12:

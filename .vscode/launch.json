@@ -8,8 +8,8 @@
       "args": [],
       "stopAtEntry": false,
       "externalConsole": true,
-      "cwd": "p:/MMT/__IoT/First_IoT/Physical_Devices/User2/devices/Keypad/src",
-      "program": "p:/MMT/__IoT/First_IoT/Physical_Devices/User2/devices/Keypad/src/build/Debug/outDebug",
+      "cwd": "p:/MMT/__IoT/First_IoT",
+      "program": "p:/MMT/__IoT/First_IoT/build/Debug/outDebug",
       "MIMode": "gdb",
       "miDebuggerPath": "gdb",
       "setupCommands": [

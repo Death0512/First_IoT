@@ -443,39 +443,64 @@ void executeRemoteUnlock(unsigned long duration_ms) {
     Serial.println(F("=== REMOTE UNLOCK COMPLETE ===\n"));
 }
 
-void sendRemoteResponse(String command_id, bool success, const char* status) {
+void sendRemoteResponse(String command_id, bool success, const char* statusText) {
     // Format: "ACK:{command_id}:{success}:{status}"
     String response = "ACK:" + command_id + ":" + 
                      String(success ? "1" : "0") + ":" + 
-                     String(status);
+                     String(statusText);
     
-    uint8_t buffer[64];
+    uint8_t buffer[128]; // Increased buffer for safety
     int idx = 0;
     
-    // Header
-    buffer[idx++] = 0xC0;
+    // --- Standard Uplink Header ---
     buffer[idx++] = 0x00;
-    buffer[idx++] = 0x00;
+    buffer[idx++] = 0x02;
+    buffer[idx++] = 0x17;
     
-    // Address (Gateway)
-    buffer[idx++] = 0x00;
-    buffer[idx++] = 0x00;
+    // Header byte 0: msg_type = 0x06 (Use GATE_STATUS for ACKs), version = 0x01
+    uint8_t header0 = (MSG_TYPE_GATE_STATUS << 4) | 0x01;
+    buffer[idx++] = header0;
     
-    // Channel
-    buffer[idx++] = 23;
+    // Header byte 1: flags = 0x00, device_type = 0x01
+    uint8_t header1 = (0x00 << 4) | DEVICE_TYPE_RFID_GATE;
+    buffer[idx++] = header1;
     
-    // Length
-    buffer[idx++] = response.length();
+    // Sequence
+    buffer[idx++] = (seq & 0xFF);
+    buffer[idx++] = (seq >> 8);
+    seq++;
     
-    // Data
-    for (unsigned int i = 0; i < response.length(); i++) {
+    // Timestamp
+    uint32_t timestamp = millis() / 1000;
+    buffer[idx++] = (timestamp & 0xFF);
+    buffer[idx++] = (timestamp >> 8) & 0xFF;
+    buffer[idx++] = (timestamp >> 16) & 0xFF;
+    buffer[idx++] = (timestamp >> 24) & 0xFF;
+    
+    // Payload length
+    uint8_t payloadLen = response.length();
+    buffer[idx++] = payloadLen;
+    
+    // Payload: Response string
+    for (unsigned int i = 0; i < payloadLen; i++) {
         buffer[idx++] = response[i];
     }
+    
+    // Calculate CRC32 over header + payload (from buffer[3] to current idx)
+    uint32_t crc = crc32(&buffer[3], idx - 3);
+    
+    // Append CRC32
+    buffer[idx++] = (crc & 0xFF);
+    buffer[idx++] = (crc >> 8) & 0xFF;
+    buffer[idx++] = (crc >> 16) & 0xFF;
+    buffer[idx++] = (crc >> 24) & 0xFF;
     
     lora.sendMessage(buffer, idx);
     
     Serial.print(F("[RESPONSE] Sent: "));
     Serial.println(response);
+    Serial.print(F("[DEBUG] Packet Size: "));
+    Serial.println(idx);
 }
 
 void sendHeartbeat() {
