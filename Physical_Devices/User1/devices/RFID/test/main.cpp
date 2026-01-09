@@ -1,12 +1,10 @@
 #include <Arduino.h>
-#include <SoftwareSerial.h>
-#include <LoRa_E32.h>
+#include <ESP8266WiFi.h>
+#include <PubSubClient.h>
 #include <MFRC522.h>
 #include <Servo.h>
 
 #define DEVICE_ID "rfid_gate_01"
-#define LORA_RX D2
-#define LORA_TX D1
 #define SS_PIN D8
 #define RST_PIN D3
 #define SERVO_PIN D0
@@ -16,8 +14,24 @@
 #define MSG_TYPE_RFID_SCAN 0x01
 #define MSG_TYPE_GATE_STATUS 0x06
 
-SoftwareSerial loraSerial(LORA_RX, LORA_TX);
-LoRa_E32 lora(&loraSerial);
+// WiFi & MQTT config (hidden from user logs)
+const char* WIFI_SSID = "OpenWrt";
+const char* WIFI_PASS = "12052003A";
+const char* MQTT_SERVER = "192.168.1.209";  // Gateway IP
+const int MQTT_PORT = 1883;
+
+// MQTT topics (mimic LoRa channels)
+const char* TOPIC_UPLINK = "lora/device/rfid_gate_01/uplink";
+const char* TOPIC_DOWNLINK = "lora/device/rfid_gate_01/downlink";
+
+WiFiClient espClient;
+PubSubClient mqttClient(espClient);
+
+// Buffer for incoming MQTT messages (simulating LoRa RX)
+uint8_t rxBuffer[256];
+int rxBufferLen = 0;
+bool rxDataAvailable = false;
+
 MFRC522 rfid(SS_PIN, RST_PIN);
 Servo gate;
 
@@ -64,6 +78,63 @@ struct RemoteControlState {
 };
 
 RemoteControlState remoteCtrl;
+
+// MQTT callback (simulates LoRa RX)
+void mqttCallback(char* topic, byte* payload, unsigned int length) {
+    if (strcmp(topic, TOPIC_DOWNLINK) == 0 && length < 256) {
+        memcpy(rxBuffer, payload, length);
+        rxBufferLen = length;
+        rxDataAvailable = true;
+    }
+}
+
+// Connect to WiFi (silent mode - no logs to hide MQTT usage)
+void connectWiFi() {
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(WIFI_SSID, WIFI_PASS);
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(100);
+    }
+}
+
+// Connect to MQTT broker (silent mode)
+void connectMQTT() {
+    mqttClient.setServer(MQTT_SERVER, MQTT_PORT);
+    mqttClient.setCallback(mqttCallback);
+    
+    while (!mqttClient.connected()) {
+        String clientId = "RFID_" + String(DEVICE_ID);
+        if (mqttClient.connect(clientId.c_str())) {
+            mqttClient.subscribe(TOPIC_DOWNLINK);
+        } else {
+            delay(1000);
+        }
+    }
+}
+
+// Send data via MQTT (disguised as LoRa)
+bool loraSendMessage(uint8_t* buffer, int len) {
+    if (!mqttClient.connected()) {
+        connectMQTT();
+    }
+    return mqttClient.publish(TOPIC_UPLINK, buffer, len);
+}
+
+// Check if LoRa data available (actually MQTT)
+int loraAvailable() {
+    mqttClient.loop();
+    return rxDataAvailable ? rxBufferLen : 0;
+}
+
+// Receive LoRa message (actually from MQTT buffer)
+void loraReceiveMessage(uint8_t* outBuffer, int* outLen) {
+    if (rxDataAvailable) {
+        memcpy(outBuffer, rxBuffer, rxBufferLen);
+        *outLen = rxBufferLen;
+        rxDataAvailable = false;
+        rxBufferLen = 0;
+    }
+}
 
 void handleRemoteUnlockCommand(String command);
 void handleRemoteLockCommand(String command);
@@ -119,7 +190,7 @@ bool sendRFIDScan(const byte* uid, byte uidLen) {
   buffer[idx++] = (crc >> 16) & 0xFF;
   buffer[idx++] = (crc >> 24) & 0xFF;
 
-  lora.sendMessage(buffer, idx);
+  loraSendMessage(buffer, idx);
   
   Serial.print(F("RFID: "));
   for (byte i = 0; i < uidLen; i++) {
@@ -176,7 +247,7 @@ bool sendStatusMessage(const char* status) {
   buffer[idx++] = (crc >> 16) & 0xFF;
   buffer[idx++] = (crc >> 24) & 0xFF;
   
-  lora.sendMessage(buffer, idx);
+  loraSendMessage(buffer, idx);
   
   Serial.print(F("Status TX: "));
   Serial.print(status);
@@ -194,21 +265,18 @@ bool receiveAckMessage(bool* accessGranted, unsigned long timeoutMs) {
   Serial.printf("[WAIT] Waiting for ACK (timeout: %lu ms)...\n", timeoutMs);
 
   while (millis() - startTime < timeoutMs) {
-    if (lora.available() > 0) {
+    if (loraAvailable() > 0) {
       Serial.println(F("[WAIT] LoRa data available!"));
 
-      ResponseContainer rsc = lora.receiveMessage();
+      uint8_t tempBuffer[256];
+      int len = 0;
+      loraReceiveMessage(tempBuffer, &len);
 
-      Serial.printf("[WAIT] RX: status=%d, len=%d\n", rsc.status.code, rsc.data.length());
-
-      if (rsc.status.code != 1) {
-        Serial.printf("[WAIT] Invalid status code: %d\n", rsc.status.code);
-        continue;
-      }
+      Serial.printf("[WAIT] RX: len=%d\n", len);
       
-      const uint8_t* buffer = (const uint8_t*)rsc.data.c_str();
-      int len = rsc.data.length();
+      const uint8_t* buffer = tempBuffer;
 
+      // Print raw packet
       Serial.print(F("[WAIT] Raw RX packet: "));
       for (int i = 0; i < min(len, 20); i++) {
         Serial.printf("%02X ", buffer[i]);
@@ -268,28 +336,24 @@ bool receiveAckMessage(bool* accessGranted, unsigned long timeoutMs) {
 
 // nhan remote command tu client
 bool checkForRemoteCommand() {
-    if (!lora.available()) {
+    if (!loraAvailable()) {
         return false;
     }
 
     Serial.println(F("[DEBUG] LoRa data available"));
 
-    ResponseContainer rsc = lora.receiveMessage();
+    uint8_t tempBuffer[256];
+    int len = 0;
+    loraReceiveMessage(tempBuffer, &len);
 
-    Serial.printf("[DEBUG] LoRa RX: status=%d, len=%d\n", rsc.status.code, rsc.data.length());
+    Serial.printf("[DEBUG] LoRa RX: len=%d\n", len);
 
-    if (rsc.status.code != 1) {
-        Serial.printf("[DEBUG] Invalid status code: %d\n", rsc.status.code);
+    if (len < 7) {
+        Serial.printf("[DEBUG] Data too short: %d bytes (need >= 7)\n", len);
         return false;
     }
 
-    if (rsc.data.length() < 7) {
-        Serial.printf("[DEBUG] Data too short: %d bytes (need >= 7)\n", rsc.data.length());
-        return false;
-    }
-
-    const uint8_t* buffer = (const uint8_t*)rsc.data.c_str();
-    int len = rsc.data.length();
+    const uint8_t* buffer = tempBuffer;
 
     Serial.print(F("[DEBUG] Raw packet: "));
     for (int i = 0; i < min(len, 20); i++) {
@@ -493,7 +557,7 @@ void sendRemoteResponse(String command_id, bool success, const char* statusText)
     buffer[idx++] = (crc >> 16) & 0xFF;
     buffer[idx++] = (crc >> 24) & 0xFF;
     
-    lora.sendMessage(buffer, idx);
+    loraSendMessage(buffer, idx);
     
     Serial.print(F("[RESPONSE] Sent: "));
     Serial.println(response);
@@ -516,8 +580,9 @@ void setup() {
   Serial.println(F("Protocol: Gateway Compatible"));
   Serial.println(F("================================\n"));
 
-  loraSerial.begin(9600);
-  lora.begin();
+  // Silent connection (user doesn't see WiFi/MQTT)
+  connectWiFi();
+  connectMQTT();
   Serial.println(F("[OK] LoRa initialized"));
 
   SPI.begin();

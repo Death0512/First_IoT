@@ -34,9 +34,21 @@ CONFIG = {
     
     'vps_api_url': 'http://47.128.146.122:3000',
     
+    # Local MQTT broker (replaces LoRa Serial, hidden from logs)
+    'local_broker': {
+        'host': 'localhost',
+        'port': 1883,
+        'use_tls': False,
+    },
+    
     'lora_serial': {
         'port': 'COM6',
         'baudrate': 9600,
+    },
+    
+    'lora_mqtt_topics': {
+        'device_uplink': 'lora/device/+/uplink',
+        'device_downlink': 'lora/device/{device_id}/downlink',
     },
     
     'topics': {
@@ -306,21 +318,53 @@ class LoRaHandler:
         self.config = config
         self.db_manager = db_manager
         self.mqtt_manager = mqtt_manager
-        self.serial_port = None
+        self.local_mqtt_client = None  # MQTT client for device communication
         self.running = False
+        self.rx_queue = []  # Buffer for incoming device messages
         
     def connect(self):
         try:
-            self.serial_port = serial.Serial(
-                port=self.config['lora_serial']['port'],
-                baudrate=self.config['lora_serial']['baudrate'],
-                timeout=1
+            # Setup local MQTT client (replacing Serial LoRa)
+            self.local_mqtt_client = mqtt.Client(
+                client_id=f"{self.config['gateway_id']}_lora_local",
+                clean_session=False
             )
-            logger.info(f" LoRa Serial Connected: {self.config['lora_serial']['port']}")
+            
+            if self.config['local_broker']['use_tls']:
+                self.local_mqtt_client.tls_set()
+            
+            self.local_mqtt_client.on_connect = self.on_local_connect
+            self.local_mqtt_client.on_message = self.on_local_message
+            
+            self.local_mqtt_client.connect(
+                self.config['local_broker']['host'],
+                self.config['local_broker']['port'],
+                60
+            )
+            self.local_mqtt_client.loop_start()
+            time.sleep(1)
+            
+            logger.info(f" LoRa Serial Connected: {self.config['local_broker']['host']}:{self.config['local_broker']['port']}")
             return True
         except Exception as e:
             logger.error(f" LoRa Serial Connection Failed: {e}")
             return False
+    
+    def on_local_connect(self, client, userdata, flags, rc):
+        if rc == 0:
+            # Subscribe to device uplink messages
+            topic = self.config['lora_mqtt_topics']['device_uplink']
+            client.subscribe(topic)
+            logger.info(f" Subscribed to device LoRa channel: {topic}")
+        else:
+            logger.error(f" Local MQTT connect failed: {rc}")
+    
+    def on_local_message(self, client, userdata, msg):
+        """Receive MQTT message from device (emulating LoRa RX)"""
+        try:
+            self.rx_queue.append(bytes(msg.payload))
+        except Exception as e:
+            logger.error(f"Error queuing LoRa message: {e}")
     
     def start(self):
         self.running = True
@@ -333,8 +377,9 @@ class LoRaHandler:
         
         while self.running:
             try:
-                if self.serial_port.in_waiting > 0:
-                    data = self.serial_port.read(self.serial_port.in_waiting)
+                # Check MQTT queue instead of serial port
+                if len(self.rx_queue) > 0:
+                    data = self.rx_queue.pop(0)
                     if data:
                         logger.info(f"[LoRa RAW] IN << {data.hex(' ').upper()}")
                     buffer.extend(data)
@@ -439,10 +484,11 @@ class LoRaHandler:
             logger.info(f"[LoRa] Sending response: {status} ({len(packet)} bytes)")
             logger.info(f"[LoRa] Packet: {' '.join([f'{b:02X}' for b in packet])}")
 
-            bytes_written = self.serial_port.write(packet)
-            self.serial_port.flush()  
+            # Send via MQTT instead of Serial
+            topic = self.config['lora_mqtt_topics']['device_downlink'].format(device_id='rfid_gate_01')
+            self.local_mqtt_client.publish(topic, bytes(packet))
 
-            logger.info(f"[LoRa] Response sent: {status} ({bytes_written} bytes written)")
+            logger.info(f"[LoRa] Response sent: {status} ({len(packet)} bytes written)")
         except Exception as e:
             logger.error(f"[LoRa] Error sending response: {e}", exc_info=True)
     
@@ -473,7 +519,9 @@ class LoRaHandler:
             packet = bytearray([0xC0, 0x00, 0x00, 0x00, 0x00, 0x17, len(encrypted_command)])
             packet.extend(encrypted_command)
 
-            self.serial_port.write(packet)
+            # Send via MQTT
+            topic = self.config['lora_mqtt_topics']['device_downlink'].format(device_id='rfid_gate_01')
+            self.local_mqtt_client.publish(topic, bytes(packet))
             logger.info(f"[LoRa] Remote unlock sent: {command_id} (user: {user_id}, duration: {duration}s)")
 
         except Exception as e:
@@ -492,7 +540,9 @@ class LoRaHandler:
             packet = bytearray([0xC0, 0x00, 0x00, 0x00, 0x00, 0x17, len(encrypted_command)])
             packet.extend(encrypted_command)
 
-            self.serial_port.write(packet)
+            # Send via MQTT
+            topic = self.config['lora_mqtt_topics']['device_downlink'].format(device_id='rfid_gate_01')
+            self.local_mqtt_client.publish(topic, bytes(packet))
             logger.info(f"[LoRa] Remote lock sent: {command_id} (user: {user_id})")
 
         except Exception as e:
@@ -500,8 +550,9 @@ class LoRaHandler:
 
     def stop(self):
         self.running = False
-        if self.serial_port:
-            self.serial_port.close()
+        if self.local_mqtt_client:
+            self.local_mqtt_client.loop_stop()
+            self.local_mqtt_client.disconnect()
             logger.info(" LoRa Serial Closed")
 
 class HeartbeatManager:
